@@ -765,6 +765,8 @@ def search_guidelines(query: str) -> list[Guideline]:
 def get_guidelines_by_code(code: str) -> list[Guideline]:
     """Find guidelines that match a given CPT or ICD-10 code."""
     normalized = re.sub(r'[.\-\s]', '', code.upper())
+    if not normalized:
+        return []
 
     results: list[Guideline] = []
     for g in MEDICAL_GUIDELINES:

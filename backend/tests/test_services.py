@@ -74,3 +74,41 @@ def test_guideline_chunks():
     chunks = get_guideline_chunks()
     assert len(chunks) > 10
     assert all(hasattr(c, "id") and hasattr(c, "text") and hasattr(c, "guideline_id") for c in chunks)
+
+
+def test_retrieval_prefers_cardiac_code_match_without_padding_irrelevant_sources():
+    from app.services.retrieval import retrieve_guideline_context
+
+    results = retrieve_guideline_context(
+        denied_service="Left Heart Catheterization with Coronary Angiography",
+        denial_reason="Stress testing results do not meet criteria.",
+        cpt_codes="93458",
+        icd10_codes="I20.9, I25.10",
+    )
+    guideline_ids = [r.guideline_id for r in results]
+
+    assert "cms-ncd-20.7" in guideline_ids
+    assert "cms-ncd-220.6" not in guideline_ids
+    assert "lcd-l35014" not in guideline_ids
+
+
+def test_retrieval_splits_multiple_codes_before_matching():
+    from app.services.retrieval import retrieve_guideline_context
+
+    results = retrieve_guideline_context(
+        denied_service="PET/CT for NSCLC staging",
+        denial_reason="PET/CT considered investigational.",
+        cpt_codes="78816, 71260",
+        icd10_codes="C34.11, R91.1",
+    )
+    guideline_ids = {r.guideline_id for r in results}
+
+    assert "cms-ncd-220.6" in guideline_ids
+    assert "nccn-nsclc-2024" in guideline_ids
+
+
+def test_eval_suite_contains_more_than_fifty_scenarios():
+    from eval.scenarios import EVALUATION_CASES
+
+    assert len(EVALUATION_CASES) >= 50
+    assert all(case.get("expectedGuidelineIds") for case in EVALUATION_CASES)

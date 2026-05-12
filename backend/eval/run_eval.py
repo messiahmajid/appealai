@@ -15,73 +15,20 @@ import httpx
 from eval.metrics import (
     check_citations_present,
     check_denial_reason_addressed,
+    check_expected_guideline_sources,
     check_letter_structure,
     check_no_hallucinated_guidelines,
     check_patient_data_accuracy,
     check_response_schema,
     check_verification_passes,
 )
-
-
-SAMPLE_CASES = [
-    {
-        "id": "ortho-tka",
-        "clinicalNotes": "PATIENT: Margaret Thompson\nDOB: 05/12/1957\nSevere bilateral knee OA, KL Grade 4, bone-on-bone. Failed 8 months conservative: PT 24 sessions, meloxicam, corticosteroid injections x4, HA injection, bracing. WOMAC 72/96, VAS 8/10. BMI 29.8, A1c 6.8%.",
-        "denialReason": "Insufficient documentation of conservative management.",
-        "deniedService": "Total Knee Arthroplasty, Right",
-        "cptCodes": "27447",
-        "icd10Codes": "M17.11",
-        "insuranceCompany": "UnitedHealthcare",
-        "patientName": "Margaret Thompson",
-        "patientDOB": "05/12/1957",
-        "memberId": "UHC-887234561",
-        "claimNumber": "PA-2026-0115-89234",
-        "denialDate": "01/28/2026",
-        "physicianName": "Dr. Sarah Mitchell, MD",
-        "physicianNPI": "1234567890",
-        "practiceName": "Advanced Orthopedic Associates",
-    },
-    {
-        "id": "cardio-cath",
-        "clinicalNotes": "PATIENT: Robert Williams\nDOB: 08/23/1953\nNew-onset exertional angina. Stress echo: 2.5mm ST depression V2-V5, NEW hypokinesis anterior wall/septum/apex (LAD territory). High-risk: early ischemia Stage 2, large territory. A1c 7.2%, LDL 142.",
-        "denialReason": "Stress testing results do not meet criteria for invasive cardiac catheterization.",
-        "deniedService": "Left Heart Catheterization with Coronary Angiography",
-        "cptCodes": "93458",
-        "icd10Codes": "I20.9, I25.10",
-        "insuranceCompany": "Anthem Blue Cross Blue Shield",
-        "patientName": "Robert Williams",
-        "patientDOB": "08/23/1953",
-        "memberId": "ANT-443876210",
-        "claimNumber": "PA-2026-0203-55612",
-        "denialDate": "02/08/2026",
-        "physicianName": "Dr. James Chen, MD, FACC",
-        "physicianNPI": "9876543210",
-        "practiceName": "Heart & Vascular Institute",
-    },
-    {
-        "id": "onc-pet",
-        "clinicalNotes": "PATIENT: David Kowalski\nDOB: 11/30/1964\nBiopsy-confirmed NSCLC adenocarcinoma RUL. CT: 4.5x3.8cm mass, mediastinal LN (station 4R 2.1cm, station 7 1.8cm). Stage cT2bN2M0 IIIA. PET/CT needed for staging.",
-        "denialReason": "PET/CT is considered experimental/investigational. Standard CT sufficient for staging.",
-        "deniedService": "PET/CT Whole Body for Tumor Staging",
-        "cptCodes": "78816",
-        "icd10Codes": "C34.11, R91.1",
-        "insuranceCompany": "Aetna",
-        "patientName": "David Kowalski",
-        "patientDOB": "11/30/1964",
-        "memberId": "AET-776543890",
-        "claimNumber": "PA-2026-0212-33478",
-        "denialDate": "02/15/2026",
-        "physicianName": "Dr. Aisha Patel, MD",
-        "physicianNPI": "5678901234",
-        "practiceName": "Cancer Center of Greater Philadelphia",
-    },
-]
+from eval.scenarios import EVALUATION_CASES
 
 EXPECTED_APPEAL_KEYS = ["appealId", "letter", "citations", "ragSources", "webEvidence"]
 EXPECTED_VERIFY_KEYS = ["overallVerdict", "confidenceScore", "checks", "flaggedIssues", "summary"]
 
 
-def run_evaluation(base_url: str) -> dict:
+def run_evaluation(base_url: str, limit: int | None = None) -> dict:
     results = {"cases": [], "summary": {"total_checks": 0, "passed": 0, "failed": 0}}
 
     client = httpx.Client(base_url=base_url, timeout=120)
@@ -96,7 +43,9 @@ def run_evaluation(base_url: str) -> dict:
         print(f"ERROR: Cannot connect to {base_url}: {e}")
         sys.exit(1)
 
-    for case in SAMPLE_CASES:
+    cases = EVALUATION_CASES[:limit] if limit else EVALUATION_CASES
+
+    for case in cases:
         case_id = case["id"]
         print(f"\n{'='*60}")
         print(f"Evaluating case: {case_id}")
@@ -130,6 +79,13 @@ def run_evaluation(base_url: str) -> dict:
         letter = data.get("letter", "")
         citations = data.get("citations", [])
         rag_sources = data.get("ragSources", [])
+
+        # Check 1b: Expected guideline family retrieved
+        expected_sources_check = check_expected_guideline_sources(
+            rag_sources, case.get("expectedGuidelineIds", [])
+        )
+        case_result["checks"]["expected_guideline_sources"] = expected_sources_check
+        _tally(results, expected_sources_check)
 
         # Check 2: Letter structure
         structure_check = check_letter_structure(letter)
@@ -209,9 +165,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run AppealAI evaluation pipeline")
     parser.add_argument("--base-url", default="http://localhost:8000", help="Backend base URL")
     parser.add_argument("--output", default=None, help="Save results to JSON file")
+    parser.add_argument("--limit", default=None, type=int, help="Limit number of cases")
     args = parser.parse_args()
 
-    results = run_evaluation(args.base_url)
+    results = run_evaluation(args.base_url, args.limit)
 
     if args.output:
         with open(args.output, "w") as f:

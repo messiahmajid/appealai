@@ -735,6 +735,8 @@ export function searchGuidelines(query: string): Guideline[] {
 
 export function getGuidelinesByCode(code: string): Guideline[] {
     const normalized = code.toUpperCase().replace(/[.\-\s]/g, '');
+    if (!normalized) return [];
+
     return MEDICAL_GUIDELINES.filter(g => {
         const allCodes = [...g.relevantCptCodes, ...g.relevantIcd10Codes]
             .map(c => c.toUpperCase().replace(/[.\-\s]/g, ''));

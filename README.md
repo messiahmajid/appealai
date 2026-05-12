@@ -31,21 +31,22 @@ Despite this, **50-70% of denied claims are overturned on appeal** when the docu
 - **RAG over 11 medical guidelines** — coverage criteria for CT, MRI, PET/CT, total knee arthroplasty, spinal fusion, cardiac catheterization, NSCLC staging, biologic DMARDs, power mobility devices, bariatric surgery, and sleep studies. Each guideline includes evidence-based statistics from landmark studies.
 - **Live PubMed search** — queries NCBI E-utilities API (free, no key needed) for relevant peer-reviewed studies before each generation.
 - **Multi-model LLM support** — Claude 3.5 Haiku (primary) with automatic fallback to Gemini Flash-Lite and OpenRouter free models.
-- **3 realistic test cases** — pre-built clinical scenarios (orthopedic TKA, cardiac catheterization, NSCLC PET/CT staging) for demo and testing.
+- **Evaluation harness** — deterministic 50+ scenario suite across 11 medical policy areas, plus API and retrieval tests.
 - **Appeal history** — browse, search, and revisit previously generated appeals.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | Next.js 16 (App Router) |
+| Framework | Next.js 16 (App Router), FastAPI |
 | Frontend | React 19 |
 | Styling | Tailwind CSS v4 + custom CSS |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy |
 | Primary LLM | Claude 3.5 Haiku (Anthropic) |
 | Fallback LLMs | Gemini 2.0 Flash-Lite, OpenRouter free models |
 | Evidence Search | PubMed NCBI E-utilities API |
 | Medical Codes | In-memory ICD-10 + CPT lookup (~130 codes) |
-| Storage | File-based JSON persistence |
+| Storage | PostgreSQL for FastAPI backend; local JSON fallback for standalone Next.js prototype |
 
 ## Setup
 
@@ -78,13 +79,41 @@ OPENROUTER_API_KEY=your-openrouter-key
 
 You need **at least one** API key. The app will use whichever is available in priority order: Anthropic > Gemini > OpenRouter.
 
-### Run
+### Run the Standalone Next.js Prototype
 
 ```bash
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### Run the FastAPI + PostgreSQL Backend
+
+```bash
+docker compose up -d postgres
+cp backend/.env.example backend/.env
+npm run backend:migrate
+npm run backend:dev
+```
+
+In a second terminal:
+
+```bash
+APPEALAI_USE_FASTAPI=true APPEALAI_BACKEND_URL=http://localhost:8000 npm run dev
+```
+
+The frontend still calls `/api/*`; with `APPEALAI_USE_FASTAPI=true`, those routes forward to the FastAPI backend.
+
+### Test and Evaluate
+
+```bash
+npm run lint
+npm run build
+npm run backend:test
+npm run eval -- --limit 5
+```
+
+Omit `--limit 5` to run all 55 evaluation scenarios against a live backend.
 
 ### Try a Sample Case
 
@@ -98,9 +127,9 @@ User Input (clinical notes + denial details)
        v
 +------------------------------------------+
 |  RAG Retrieval                           |
-|  CPT/ICD-10 code matching -> guidelines  |
-|  Keyword fallback if <2 matches          |
-|  Cap at 3 most relevant guidelines       |
+|  Exact CPT/ICD-10 matches first          |
+|  Keyword fallback only when no code hit  |
+|  Cap at 3 relevant guidelines            |
 +-------------------+----------------------+
                     |
        +------------+------------+
@@ -164,11 +193,21 @@ src/
     ├── gemini.ts               # Multi-model LLM abstraction
     ├── prompts.ts              # Prompt templates + anti-hallucination rules
     ├── guidelines.ts           # 11 medical guidelines with evidence
-    ├── rag.ts                  # RAG pipeline (code matching + keyword)
+    ├── retrieval.ts            # Guideline source selection
+    ├── rag.ts                  # Embedding + keyword fallback retrieval
     ├── web-evidence.ts         # PubMed search integration
     ├── db.ts                   # File-based persistence
     ├── medical-codes.ts        # ICD-10 + CPT lookup
     └── sample-data.ts          # 3 test cases
+backend/
+├── app/
+│   ├── main.py                 # FastAPI app, middleware, routers
+│   ├── routers/                # Appeal, code search, verification endpoints
+│   ├── services/               # LLM, RAG, retrieval, PubMed, guideline logic
+│   └── db/                     # SQLAlchemy async session + tables
+├── alembic/                    # PostgreSQL migrations
+├── eval/                       # 55-case evaluation harness
+└── tests/                      # API, retrieval, service tests
 ```
 
 ## License

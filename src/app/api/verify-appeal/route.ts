@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText, isApiKeyConfigured } from '@/lib/gemini';
 import { VERIFICATION_SYSTEM, buildVerificationPrompt } from '@/lib/prompts';
+import { proxyToBackend, shouldUseFastAPI } from '@/lib/backend-proxy';
 
 export async function POST(request: NextRequest) {
     try {
+        if (shouldUseFastAPI()) {
+            return proxyToBackend(request, '/api/verify-appeal');
+        }
+
         const { letter, clinicalNotes, ragContext, denialReason } = await request.json();
 
         if (!letter || !clinicalNotes || !denialReason) {

@@ -88,6 +88,19 @@ def check_response_schema(response: dict, expected_keys: list[str]) -> dict:
     }
 
 
+def check_expected_guideline_sources(rag_sources: list[dict], expected_guideline_ids: list[str]) -> dict:
+    """Verify retrieval includes the expected policy/guideline family."""
+    found_ids = {s.get("guidelineId", s.get("guideline_id", "")) for s in rag_sources}
+    expected = set(expected_guideline_ids)
+    matched = expected & found_ids
+    return {
+        "passed": bool(matched),
+        "expected": sorted(expected),
+        "found": sorted(found_ids),
+        "matched": sorted(matched),
+    }
+
+
 def check_verification_passes(verification: dict) -> dict:
     """Check verification endpoint returns non-FAIL verdict."""
     verdict = verification.get("overallVerdict", "FAIL")

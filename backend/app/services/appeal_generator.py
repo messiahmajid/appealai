@@ -5,10 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.tables import Appeal
 from app.models.appeals import AppealCreate, AppealResponse, Citation, RAGSourceItem, WebEvidenceItem
-from app.services.guidelines import get_guidelines_by_code
 from app.services.llm import generate_text, is_api_key_configured
 from app.services.prompts import APPEAL_LETTER_SYSTEM, build_appeal_prompt
-from app.services.rag import search_rag_fallback
+from app.services.retrieval import retrieve_guideline_context
 from app.services.web_evidence import search_web_evidence
 
 logger = structlog.get_logger()
@@ -41,44 +40,16 @@ async def generate_appeal(req: AppealCreate, db: AsyncSession) -> AppealResponse
     appeal_id = str(appeal.id)
 
     try:
-        # Step 2: RAG retrieval — code-matching first, keyword as supplement
-        code_matched = list(get_guidelines_by_code(req.cpt_codes))
-        for code in req.icd10_codes.split(","):
-            code = code.strip()
-            if code:
-                code_matched.extend(get_guidelines_by_code(code))
-
-        seen_ids: set[str] = set()
-        rag_results: list[dict] = []
-        for g in code_matched:
-            if g.id not in seen_ids:
-                seen_ids.add(g.id)
-                rag_results.append({
-                    "text": f"[{g.title}] [Source: {g.source}]\n{g.content}",
-                    "guideline_id": g.id,
-                    "title": g.title,
-                    "source": g.source,
-                    "score": 1.0,
-                })
-
-        if len(rag_results) < 2:
-            rag_query = f"{req.denied_service} {req.denial_reason} {req.cpt_codes} {req.icd10_codes}"
-            keyword_results = search_rag_fallback(rag_query, 3)
-            for r in keyword_results:
-                if r.guideline_id not in seen_ids:
-                    seen_ids.add(r.guideline_id)
-                    rag_results.append({
-                        "text": r.text,
-                        "guideline_id": r.guideline_id,
-                        "title": r.title,
-                        "source": r.source,
-                        "score": r.score,
-                    })
-
-        rag_results = rag_results[:3]
+        # Step 2: RAG retrieval — prefer exact code matches over loose keyword matches.
+        rag_results = retrieve_guideline_context(
+            denied_service=req.denied_service,
+            denial_reason=req.denial_reason,
+            cpt_codes=req.cpt_codes,
+            icd10_codes=req.icd10_codes,
+        )
 
         rag_context = "\n\n---\n\n".join(
-            f"[Reference {i + 1}] {r['title']}\nSource: {r['source']}\nRelevance Score: {r['score'] * 100:.1f}%\n\n{r['text']}"
+            f"[Reference {i + 1}] {r.title}\nSource: {r.source}\nRelevance Score: {r.score * 100:.1f}%\n\n{r.text}"
             for i, r in enumerate(rag_results)
         )
 
@@ -122,20 +93,20 @@ async def generate_appeal(req: AppealCreate, db: AsyncSession) -> AppealResponse
         citations_data = [
             {
                 "index": i + 1,
-                "guidelineId": r["guideline_id"],
-                "title": r["title"],
-                "source": r["source"],
-                "text": r["text"][:300] + "...",
+                "guidelineId": r.guideline_id,
+                "title": r.title,
+                "source": r.source,
+                "text": r.text[:300] + "...",
             }
             for i, r in enumerate(rag_results)
         ]
 
         rag_sources_data = [
             {
-                "guidelineId": r["guideline_id"],
-                "title": r["title"],
-                "source": r["source"],
-                "relevanceScore": r["score"],
+                "guidelineId": r.guideline_id,
+                "title": r.title,
+                "source": r.source,
+                "relevanceScore": r.score,
             }
             for r in rag_results
         ]

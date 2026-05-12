@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText, isApiKeyConfigured } from '@/lib/gemini';
-import { searchRAGFallback } from '@/lib/rag';
-import { getGuidelinesByCode } from '@/lib/guidelines';
 import {
     APPEAL_LETTER_SYSTEM,
     buildAppealPrompt,
 } from '@/lib/prompts';
 import { createAppeal, updateAppeal } from '@/lib/db';
 import { searchWebEvidence } from '@/lib/web-evidence';
+import { retrieveGuidelineContext } from '@/lib/retrieval';
+import { proxyToBackend, shouldUseFastAPI } from '@/lib/backend-proxy';
 
 export async function POST(request: NextRequest) {
     let appealId: string | null = null;
     try {
+        if (shouldUseFastAPI()) {
+            return proxyToBackend(request, '/api/generate-appeal');
+        }
+
         const body = await request.json();
         const {
             clinicalNotes,
@@ -65,44 +69,13 @@ export async function POST(request: NextRequest) {
         appealId = appeal.id;
         updateAppeal(appeal.id, { status: 'generating' });
 
-        // Step 2: RAG retrieval — code-matching first, keyword as supplement
-        // Priority 1: Guidelines that match CPT or ICD-10 codes (most precise)
-        const codeMatchedGuidelines = [
-            ...getGuidelinesByCode(cptCodes),
-            ...icd10Codes.split(',').flatMap((code: string) => getGuidelinesByCode(code.trim())),
-        ];
-
-        // Deduplicate code matches
-        const seenIds = new Set<string>();
-        const ragResults: { text: string; guidelineId: string; title: string; source: string; score: number }[] = [];
-
-        for (const g of codeMatchedGuidelines) {
-            if (!seenIds.has(g.id)) {
-                seenIds.add(g.id);
-                ragResults.push({
-                    text: `[${g.title}] [Source: ${g.source}]\n${g.content}`,
-                    guidelineId: g.id,
-                    title: g.title,
-                    source: g.source,
-                    score: 1.0,
-                });
-            }
-        }
-
-        // Priority 2: If code matching found fewer than 2, supplement with keyword search
-        if (ragResults.length < 2) {
-            const ragQuery = `${deniedService} ${denialReason} ${cptCodes} ${icd10Codes}`;
-            const keywordResults = searchRAGFallback(ragQuery, 3);
-            for (const r of keywordResults) {
-                if (!seenIds.has(r.guidelineId)) {
-                    seenIds.add(r.guidelineId);
-                    ragResults.push(r);
-                }
-            }
-        }
-
-        // Cap at 3 most relevant guidelines to reduce noise and prompt size
-        ragResults.splice(3);
+        // Step 2: RAG retrieval — prefer exact code matches over loose keyword matches.
+        const ragResults = retrieveGuidelineContext({
+            deniedService,
+            denialReason,
+            cptCodes: cptCodes || '',
+            icd10Codes: icd10Codes || '',
+        });
 
         const ragContext = ragResults
             .map((r, i) => `[Reference ${i + 1}] ${r.title}\nSource: ${r.source}\nRelevance Score: ${(r.score * 100).toFixed(1)}%\n\n${r.text}`)

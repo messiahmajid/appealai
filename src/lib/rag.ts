@@ -74,18 +74,22 @@ export async function initializeRAG(): Promise<void> {
     // Check if already initialized
     if (embeddedChunks) return;
 
+    const currentChunks = getGuidelineChunks();
+    const currentChunkIds = new Set(currentChunks.map(c => c.id));
+
     // Try loading from cache
     const cached = loadCachedEmbeddings();
-    if (cached) {
+    if (cached && cached.length === currentChunks.length && cached.every(c => currentChunkIds.has(c.id))) {
         embeddedChunks = cached;
         console.log(`Loaded ${cached.length} cached guideline embeddings`);
         return;
+    } else if (cached) {
+        console.log('Guideline corpus changed; regenerating guideline embeddings');
     }
 
     // Generate fresh embeddings
     console.log('Generating guideline embeddings (first run)...');
-    const chunks = getGuidelineChunks();
-    const texts = chunks.map(c => c.text);
+    const texts = currentChunks.map(c => c.text);
 
     // Batch embed in groups of 10
     const allEmbeddings: number[][] = [];
@@ -95,7 +99,7 @@ export async function initializeRAG(): Promise<void> {
         allEmbeddings.push(...batchEmbeddings);
     }
 
-    embeddedChunks = chunks.map((chunk, i) => ({
+    embeddedChunks = currentChunks.map((chunk, i) => ({
         ...chunk,
         embedding: allEmbeddings[i],
     }));

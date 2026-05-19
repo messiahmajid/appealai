@@ -742,6 +742,213 @@ CPAP Treatment Outcomes:
         relevant_cpt_codes=['95810', '95811', '95800', '95801', '95806', 'E0601', 'E0470', 'E0471'],
         relevant_icd10_codes=['G47.33', 'G47.30', 'G47.39', 'R06.83', 'G47.9'],
     ),
+    Guideline(
+        id='ada-glp1-t2dm-2026',
+        title='ADA Standards-Aligned Policy — GLP-1/GIP Therapy for Type 2 Diabetes',
+        source='Commercial Pharmacy Policy Template; ADA Standards of Care in Diabetes 2026 alignment',
+        category='Specialty Pharmacy',
+        effective_date='2026-01-01',
+        content="""GLP-1 receptor agonists and dual GIP/GLP-1 receptor agonists, including tirzepatide (Mounjaro), semaglutide (Ozempic), dulaglutide (Trulicity), liraglutide, and related agents, are medically necessary for type 2 diabetes when documentation supports glycemic need and appropriate use for diabetes rather than weight loss alone.
+
+Common Prior Authorization Criteria:
+1. Diagnosis of type 2 diabetes mellitus, supported by ICD-10 code, assessment, or medication history.
+2. A1c above individualized goal or documented need for intensification of glucose-lowering therapy.
+3. Current use, prior trial and failure, intolerance, or contraindication to metformin unless metformin is clinically inappropriate.
+4. If required by the plan, trial and failure, intolerance, contraindication, or clinical inappropriateness of preferred formulary GLP-1 receptor agonists such as Ozempic or Trulicity.
+5. Requested drug is prescribed for glycemic management in type 2 diabetes, not solely for obesity or weight loss.
+6. Prescriber is an endocrinologist, diabetes specialist, or clinician managing diabetes.
+
+Medical Rationale:
+- ADA Standards of Care recognize GLP-1 receptor agonists and SGLT2 inhibitors as important therapy in adults with type 2 diabetes, especially when cardiovascular, kidney, weight, hypoglycemia, or treatment-burden considerations inform medication choice.
+- Metformin remains commonly used first-line therapy when tolerated and appropriate, but intolerance, contraindication, inadequate glycemic response, hypoglycemia risk from sulfonylureas, or comorbid cardiometabolic disease may support an alternative or additive agent.
+- Tirzepatide has demonstrated strong A1c lowering and weight reduction in type 2 diabetes trials, making it clinically relevant when obesity, hyperglycemia, and hypoglycemia avoidance are documented.
+
+Required Documentation:
+- Type 2 diabetes diagnosis and ICD-10 code such as E11.65, E11.9, E11.22, E11.42, or E11.69
+- Most recent A1c and date
+- Current diabetes medication list and prior trials
+- Metformin trial, intolerance, contraindication, or reason not appropriate
+- Preferred GLP-1 trial/failure or medical reason step therapy is inappropriate when required
+- Statement that drug is requested for type 2 diabetes/glycemic control""",
+        approval_criteria=[
+            'Type 2 diabetes diagnosis documented',
+            'A1c above individualized goal or need for glycemic intensification documented',
+            'Metformin current use, trial/failure, intolerance, contraindication, or clinical inappropriateness documented',
+            'Preferred formulary GLP-1 trial/failure, intolerance, contraindication, or reason step therapy is inappropriate when required',
+            'Requested drug is for type 2 diabetes/glycemic control and not solely weight loss',
+            'Specialist or diabetes-managing prescriber involvement documented',
+        ],
+        relevant_cpt_codes=['MOUNJARO', 'TIRZEPATIDE', 'OZEMPIC', 'SEMAGLUTIDE', 'TRULICITY', 'DULAGLUTIDE', 'VICTOZA', 'LIRAGLUTIDE'],
+        relevant_icd10_codes=['E11.65', 'E11.9', 'E11.22', 'E11.42', 'E11.69', 'E66.9', 'Z79.4'],
+    ),
+    Guideline(
+        id='lcd-l34163-tha',
+        title='LCD L34163 — Total Hip Arthroplasty (THA)',
+        source='Local Coverage Determination — Total Hip Arthroplasty',
+        category='Orthopedic Surgery',
+        effective_date='2024-10-01',
+        content="""Total hip arthroplasty is medically necessary when severe hip joint disease causes pain and functional limitation despite appropriate non-surgical care. Common covered diagnoses include osteoarthritis, inflammatory arthritis, avascular necrosis, fracture sequelae, congenital/developmental hip disease, or failed prior hip surgery.
+
+Medical Necessity Criteria:
+1. Diagnosis of advanced hip joint disease documented in the medical record.
+2. Imaging supports structural hip pathology, such as joint-space narrowing, osteophytes, subchondral sclerosis/cysts, femoral head collapse, avascular necrosis, or severe degenerative change.
+3. Pain and functional impairment interfere with walking, transfers, stairs, dressing, sleep, work, or activities of daily living.
+4. Conservative therapy has failed or is contraindicated, such as NSAIDs/analgesics, physical therapy, activity modification, assistive device use, weight management, or injections when clinically appropriate.
+5. Patient has been medically optimized for surgery, including diabetes control, infection risk, smoking status, anticoagulation planning, and BMI/anesthesia risk when relevant.
+
+Required Documentation:
+- Hip radiographs or advanced imaging report with severity
+- Symptom duration and pain/functional limitation
+- Conservative treatment attempts with dates, duration, and outcomes
+- Surgical plan and medical optimization/clearance when applicable""",
+        approval_criteria=[
+            'Advanced hip joint disease diagnosis documented',
+            'Imaging supports severe structural hip pathology',
+            'Pain and functional impairment affecting ambulation or ADLs documented',
+            'Conservative therapy failure, intolerance, contraindication, or inappropriateness documented',
+            'Patient medically optimized for surgery when applicable',
+        ],
+        relevant_cpt_codes=['27130', '27132', '27134', '27137', '27138'],
+        relevant_icd10_codes=['M16.0', 'M16.10', 'M16.11', 'M16.12', 'M87.051', 'M87.052', 'S72.001A', 'S72.002A'],
+    ),
+    Guideline(
+        id='lcd-l39054-esi',
+        title='LCD L39054 — Epidural Steroid Injections for Pain Management',
+        source='Local Coverage Determination — Epidural Steroid Injections for Pain Management',
+        category='Pain Management',
+        effective_date='2022-06-30',
+        content="""Epidural steroid injections (interlaminar, transforaminal, or caudal) are medically necessary when documentation supports radicular pain, radiculopathy, or neurogenic claudication from concordant spinal pathology and when conservative treatment has not provided adequate relief.
+
+Covered Indications:
+1. Lumbar, cervical, or thoracic radiculopathy/radicular pain or neurogenic claudication due to disc herniation, osteophyte complex, severe degenerative disc disease, foraminal stenosis, or central spinal stenosis.
+2. Symptoms cause functional limitation and are concordant with history, physical examination, and imaging when imaging is clinically appropriate.
+3. At least 4 weeks of conservative care has failed, is not tolerated, or is clinically inappropriate, unless severe pain with functional loss or other documented circumstances justify earlier injection.
+4. Repeat injections require documentation of clinically meaningful improvement, commonly at least 50% sustained pain relief or functional improvement from prior injection.
+
+Required Documentation:
+- Pain distribution and neurologic findings
+- Imaging or diagnostic evidence concordant with symptoms when available
+- Conservative care attempted and response
+- Prior injection date, level, approach, medication, and response for repeat requests
+- Functional impact and treatment goal""",
+        approval_criteria=[
+            'Radiculopathy, radicular pain, or neurogenic claudication documented',
+            'Concordant exam and imaging or diagnostic evidence supports spinal pathology',
+            'Functional limitation from pain documented',
+            'At least 4 weeks conservative care failed, not tolerated, or clinically inappropriate unless exception applies',
+            'For repeat injection: meaningful prior improvement documented',
+        ],
+        relevant_cpt_codes=['62320', '62321', '62322', '62323', '64479', '64480', '64483', '64484'],
+        relevant_icd10_codes=['M54.16', 'M54.12', 'M54.14', 'M48.062', 'M48.061', 'M51.16', 'M50.10'],
+    ),
+    Guideline(
+        id='cms-l33394-oncology-drugs',
+        title='LCD L33394 — Drugs and Biologicals for Oncology Indications',
+        source='Local Coverage Determination — Coverage of Drugs and Biologicals for Label and Off-Label Uses',
+        category='Oncology Drugs',
+        effective_date='2025-01-01',
+        content="""Antineoplastic drugs and biologics are medically necessary when the requested agent is used for an FDA-approved indication or a medically accepted off-label indication supported by recognized compendia. Medicare and many commercial policies use compendia such as NCCN Drugs and Biologics Compendium, AHFS, DrugDex, Clinical Pharmacology, or Lexi-Drugs to determine medically accepted indications.
+
+Coverage Criteria:
+1. Confirmed cancer diagnosis, histology, stage, and treatment setting.
+2. Requested drug is FDA-approved for the diagnosis/setting OR is supported by a medically accepted compendium recommendation.
+3. For NCCN-supported off-label use, Category 1 or 2A recommendations are generally treated as medically accepted; Category 2B may require stronger supporting literature and payer-specific review.
+4. Biomarker testing is documented when required for the drug, such as HER2, EGFR, ALK, ROS1, BRAF, KRAS, PD-L1, MSI-H/dMMR, NTRK, or BRCA status.
+5. Prior lines of therapy, progression, contraindications, or intolerance are documented when the policy requires step therapy or line-of-therapy sequencing.
+6. Dose, schedule, route, and cycle plan are consistent with labeling, NCCN regimen, or supporting literature.
+
+Required Documentation:
+- Pathology report and stage
+- Biomarker/molecular test result when relevant
+- Prior systemic therapy and response/progression
+- Requested regimen, dose, cycle, and treatment intent
+- Guideline or compendium support for off-label use""",
+        approval_criteria=[
+            'Confirmed malignancy diagnosis, histology, stage, and treatment setting documented',
+            'FDA-approved or compendium-supported medically accepted indication documented',
+            'NCCN Category 1 or 2A support or comparable accepted compendium support when off-label',
+            'Required biomarker or molecular result documented',
+            'Prior line therapy, progression, intolerance, or contraindication documented when sequencing criteria apply',
+            'Dose and regimen consistent with label, NCCN regimen, or supporting literature',
+        ],
+        relevant_cpt_codes=['J9271', 'J9299', 'J9228', 'J9355', 'J9354', 'J9306', 'J9173', 'J9022', 'J9312', 'J9035'],
+        relevant_icd10_codes=['C34.90', 'C50.911', 'C50.912', 'C18.9', 'C19', 'C20', 'C43.9', 'C81.90', 'C83.30'],
+    ),
+    Guideline(
+        id='cms-ncd-240.2-home-oxygen',
+        title='CMS NCD 240.2 — Home Use of Oxygen',
+        source='CMS National Coverage Determination',
+        category='Durable Medical Equipment',
+        effective_date='2022-09-27',
+        content="""Home oxygen and oxygen equipment are covered when hypoxemia is documented by qualifying arterial blood gas or oxygen saturation testing at the time of need. The medical record should connect the oxygen request to a covered pulmonary or cardiac condition and document whether stationary, portable, or nocturnal oxygen is required.
+
+Group I Criteria:
+1. Arterial PO2 at or below 55 mm Hg, or oxygen saturation at or below 88%, taken at rest breathing room air; OR
+2. Same thresholds during sleep for nocturnal oxygen; OR
+3. Same thresholds during exercise when oxygen improves hypoxemia.
+
+Group II Criteria:
+1. Arterial PO2 56-59 mm Hg or oxygen saturation of 89%, AND
+2. Evidence of dependent edema suggesting congestive heart failure, pulmonary hypertension/cor pulmonale, or erythrocythemia with hematocrit greater than 56%.
+
+Portable Oxygen:
+Portable oxygen requires documentation that the patient is mobile in the home and would benefit from portable oxygen use.
+
+Required Documentation:
+- Qualifying test result, date, and testing condition (rest, sleep, or exertion)
+- Diagnosis causing hypoxemia
+- Liter flow and delivery method
+- Need for portable system if requested
+- Reassessment or continued need documentation when required""",
+        approval_criteria=[
+            'Qualifying oxygen saturation or arterial PO2 documented at time of need',
+            'Group I: SpO2 <=88% or PO2 <=55 mm Hg at rest, sleep, or exertion',
+            'Group II: SpO2 89% or PO2 56-59 mm Hg plus CHF edema, pulmonary hypertension/cor pulmonale, or erythrocythemia',
+            'Oxygen prescription includes flow rate, delivery method, and duration/frequency',
+            'Portable oxygen need supported by mobility in the home when requested',
+        ],
+        relevant_cpt_codes=['E1390', 'E1392', 'E0431', 'E0433', 'E0434', 'E0435', 'E0443', 'E0444'],
+        relevant_icd10_codes=['J44.9', 'J96.11', 'J96.10', 'R09.02', 'I27.20', 'I50.9', 'D75.1'],
+    ),
+    Guideline(
+        id='cms-l33789-power-mobility',
+        title='LCD L33789 — Power Mobility Devices',
+        source='Local Coverage Determination — Power Mobility Devices',
+        category='Durable Medical Equipment',
+        effective_date='2025-01-01',
+        content="""Power mobility devices, power wheelchairs, scooters, manual wheelchairs, and related mobility equipment require documentation that the device is reasonable and necessary for mobility-related activities of daily living in the home.
+
+Medical Necessity Criteria:
+1. The beneficiary has a mobility limitation that significantly impairs participation in mobility-related activities of daily living (MRADLs) such as toileting, feeding, dressing, grooming, and bathing in customary locations in the home.
+2. The limitation cannot be sufficiently resolved by cane or walker.
+3. For manual wheelchair: patient has sufficient upper extremity function or caregiver support to propel safely and complete MRADLs.
+4. For scooter/POV: patient can transfer safely, operate tiller steering, maintain postural stability, and use the device in the home.
+5. For power wheelchair: patient cannot use a cane, walker, manual wheelchair, or scooter effectively, but can safely operate the power wheelchair or has caregiver assistance.
+6. Face-to-face evaluation documents the condition, functional limitations, home setting, device need, and why lesser devices are insufficient.
+
+Non-Covered or Weak Documentation:
+- Device requested primarily for community mobility rather than in-home MRADLs
+- Reversible condition with expected need less than 3 months
+- Missing face-to-face exam or missing explanation of why cane/walker/manual wheelchair is insufficient
+
+Required Documentation:
+- Face-to-face mobility evaluation
+- MRADL limitations in the home
+- Ambulation distance, falls, transfers, strength, balance, pain, endurance
+- Assessment of cane/walker/manual wheelchair/POV suitability
+- Home environment supports device use
+- Detailed written order and supplier documentation""",
+        approval_criteria=[
+            'Mobility limitation significantly impairs in-home MRADLs',
+            'Cane or walker insufficient to resolve MRADL limitation',
+            'Manual wheelchair, scooter, or power wheelchair level justified by function and safety',
+            'Face-to-face evaluation documents diagnosis, progression, functional limits, and home setting',
+            'Patient can safely use requested device or has caregiver assistance',
+            'Need is not solely for community mobility and is expected to last at least 3 months',
+        ],
+        relevant_cpt_codes=['K0001', 'K0003', 'K0004', 'K0005', 'K0823', 'K0825', 'K0835', 'K0848', 'E1028', 'E2365'],
+        relevant_icd10_codes=['R26.2', 'R26.89', 'Z74.09', 'G20', 'G35', 'I69.351', 'M17.0', 'M48.061'],
+    ),
 ]
 
 
@@ -778,6 +985,10 @@ def get_guidelines_by_code(code: str) -> list[Guideline]:
             results.append(g)
 
     return results
+
+
+def get_guideline_by_id(guideline_id: str) -> Guideline | None:
+    return next((g for g in MEDICAL_GUIDELINES if g.id == guideline_id), None)
 
 
 def get_guideline_chunks() -> list[GuidelineChunk]:

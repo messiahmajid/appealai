@@ -4,7 +4,13 @@ import pytest
 
 
 SAMPLE_APPEAL_BODY = {
-    "clinicalNotes": "Patient has severe knee OA with KL Grade 4 and bone-on-bone articulation.",
+    "clinicalNotes": (
+        "Diagnosis: severe right knee osteoarthritis, ICD-10 M17.11. "
+        "X-ray on 01/10/2026 shows KL Grade 4 bone-on-bone articulation. "
+        "Pain score 8/10 with difficulty walking stairs and limitation of ADLs. "
+        "Completed physical therapy for 8 weeks and NSAIDs for 3 months without adequate relief. "
+        "Plan: proceed with right total knee arthroplasty due to failed conservative management."
+    ),
     "denialReason": "Insufficient documentation of conservative management.",
     "deniedService": "Total Knee Arthroplasty, Right",
     "cptCodes": "27447",
@@ -51,6 +57,25 @@ async def test_generate_appeal_success(client, mock_llm):
         resp = await client.post("/api/generate-appeal", json=SAMPLE_APPEAL_BODY)
         # May fail without DB, but validates request parsing
         assert resp.status_code in (200, 500)
+
+
+@pytest.mark.asyncio
+async def test_generate_appeal_stream_returns_sufficiency_error(client):
+    body = {
+        **SAMPLE_APPEAL_BODY,
+        "clinicalNotes": "Patient wants medication.",
+        "denialReason": "Requires type 2 diabetes diagnosis, A1c, and metformin failure.",
+        "deniedService": "Mounjaro",
+    }
+    with patch("app.services.appeal_generator.is_api_key_configured", return_value=True):
+        async with client.stream("POST", "/api/generate-appeal/stream", json=body) as resp:
+            payload = (await resp.aread()).decode()
+
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    assert '"stage": "sufficiency_failed"' in payload
+    assert '"stage": "error"' in payload
+    assert "sufficiencyReport" in payload
 
 
 @pytest.mark.asyncio

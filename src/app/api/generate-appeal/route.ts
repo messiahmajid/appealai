@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateText, isApiKeyConfigured } from '@/lib/gemini';
 import {
     APPEAL_LETTER_SYSTEM,
+    APPEAL_REPAIR_SYSTEM,
     buildAppealPrompt,
+    buildRepairPrompt,
 } from '@/lib/prompts';
 import { createAppeal, updateAppeal } from '@/lib/db';
 import { searchWebEvidence } from '@/lib/web-evidence';
 import { retrieveGuidelineContext } from '@/lib/retrieval';
 import { proxyToBackend, shouldUseFastAPI } from '@/lib/backend-proxy';
+import { runMedicalSafetyChecks, sanitizeGeneratedLetter } from '@/lib/medical-safety';
+import { assessClinicalNoteSufficiency, buildStructuredMedicalAnalysis, formatStructuredAnalysisForPrompt } from '@/lib/medical-analysis';
 
 export async function POST(request: NextRequest) {
     let appealId: string | null = null;
@@ -48,7 +52,31 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Step 1: Create appeal record
+        // Step 1: RAG retrieval and deterministic sufficiency check before any LLM call.
+        const ragResults = retrieveGuidelineContext({
+            deniedService,
+            denialReason,
+            cptCodes: cptCodes || '',
+            icd10Codes: icd10Codes || '',
+        });
+        const structuredAnalysis = buildStructuredMedicalAnalysis({ clinicalNotes, ragResults });
+        const sufficiencyReport = assessClinicalNoteSufficiency({
+            clinicalNotes,
+            deniedService,
+            denialReason,
+            structuredAnalysis,
+        });
+        if (sufficiencyReport.status === 'block') {
+            return NextResponse.json(
+                {
+                    error: sufficiencyReport.summary,
+                    sufficiencyReport,
+                },
+                { status: 422 },
+            );
+        }
+
+        // Step 2: Create appeal record after the notes clear the sufficiency gate.
         const appeal = createAppeal({
             patientName: patientName || 'Unknown',
             patientDOB: patientDOB || '',
@@ -69,29 +97,28 @@ export async function POST(request: NextRequest) {
         appealId = appeal.id;
         updateAppeal(appeal.id, { status: 'generating' });
 
-        // Step 2: RAG retrieval — prefer exact code matches over loose keyword matches.
-        const ragResults = retrieveGuidelineContext({
-            deniedService,
-            denialReason,
-            cptCodes: cptCodes || '',
-            icd10Codes: icd10Codes || '',
-        });
-
         const ragContext = ragResults
             .map((r, i) => `[Reference ${i + 1}] ${r.title}\nSource: ${r.source}\nRelevance Score: ${(r.score * 100).toFixed(1)}%\n\n${r.text}`)
             .join('\n\n---\n\n');
+        const structuredAnalysisContext = formatStructuredAnalysisForPrompt(structuredAnalysis);
 
         // Step 2b: Web evidence search (PubMed) — runs in parallel-safe manner
         let webEvidenceContext = '';
-        let webEvidenceResults: { source: string; title: string; citation: string; url: string }[] = [];
+        let webEvidenceResults: { source: string; title: string; citation: string; url: string; evidenceLevel?: string }[] = [];
+        let webEvidenceSources: { label: string; text: string }[] = [];
         try {
             const webEvidence = await searchWebEvidence(deniedService, denialReason, cptCodes, icd10Codes);
             webEvidenceContext = webEvidence.formattedContext;
+            webEvidenceSources = webEvidence.evidence.map((e, i) => ({
+                label: `PubMed ${i + 1}`,
+                text: `${e.title}\n${e.citation}\n${e.summary}\n${e.url}`,
+            }));
             webEvidenceResults = webEvidence.evidence.map(e => ({
                 source: e.source,
                 title: e.title,
                 citation: e.citation,
                 url: e.url,
+                evidenceLevel: e.evidenceLevel,
             }));
             if (webEvidence.evidence.length > 0) {
                 console.log(`Found ${webEvidence.evidence.length} PubMed articles for web evidence`);
@@ -119,9 +146,50 @@ export async function POST(request: NextRequest) {
             practiceName,
             ragContext,
             webEvidenceContext,
+            structuredAnalysisContext,
         });
 
-        const generatedLetter = await generateText(APPEAL_LETTER_SYSTEM, prompt, 0.15);
+        let generatedLetter = sanitizeGeneratedLetter(await generateText(APPEAL_LETTER_SYSTEM, prompt, 0.15));
+
+        let safetyReport = runMedicalSafetyChecks({
+            letter: generatedLetter,
+            clinicalNotes,
+            denialReason,
+            guidelineSources: ragResults.map((r, i) => ({
+                label: `Reference ${i + 1}`,
+                text: `${r.title}\n${r.source}\n${r.text}`,
+            })),
+            pubMedSources: webEvidenceSources,
+        });
+
+        if (safetyReport.verdict === 'FAIL') {
+            const repairedLetter = await generateText(
+                APPEAL_REPAIR_SYSTEM,
+                buildRepairPrompt({
+                    letter: generatedLetter,
+                    clinicalNotes,
+                    ragContext,
+                    webEvidenceContext,
+                    safetyReport,
+                }),
+                0.05
+            );
+            generatedLetter = sanitizeGeneratedLetter(repairedLetter);
+            safetyReport = {
+                ...runMedicalSafetyChecks({
+                    letter: generatedLetter,
+                    clinicalNotes,
+                    denialReason,
+                    guidelineSources: ragResults.map((r, i) => ({
+                        label: `Reference ${i + 1}`,
+                        text: `${r.title}\n${r.source}\n${r.text}`,
+                    })),
+                    pubMedSources: webEvidenceSources,
+                }),
+                repairAttempted: true,
+                preRepairVerdict: safetyReport.verdict,
+            } as typeof safetyReport & { repairAttempted: boolean; preRepairVerdict: string };
+        }
 
         // Step 4: Build citations
         const citations = ragResults.map((r, i) => ({
@@ -141,11 +209,16 @@ export async function POST(request: NextRequest) {
 
         // Step 5: Update appeal with results
         updateAppeal(appeal.id, {
-            status: 'completed',
+            status: safetyReport.verdict === 'FAIL' ? 'failed' : 'completed',
             parsedClinicalData: clinicalNotes,
             generatedLetter,
             citations,
             ragSources,
+            safetyReport: {
+                ...safetyReport,
+                structuredAnalysis,
+                clinicalSufficiency: sufficiencyReport,
+            },
         });
 
         return NextResponse.json({
@@ -154,6 +227,12 @@ export async function POST(request: NextRequest) {
             citations,
             ragSources,
             webEvidence: webEvidenceResults,
+            safetyReport: {
+                ...safetyReport,
+                structuredAnalysis,
+                clinicalSufficiency: sufficiencyReport,
+            },
+            clinicalSufficiencyReport: sufficiencyReport,
             parsedClinicalData: clinicalNotes,
         });
     } catch (error) {

@@ -16,6 +16,7 @@ interface PubMedArticle {
     authors: string;
     journal: string;
     year: string;
+    publicationTypes: string[];
 }
 
 interface WebEvidence {
@@ -24,6 +25,7 @@ interface WebEvidence {
     summary: string;
     citation: string;
     url: string;
+    evidenceLevel: string;
 }
 
 /**
@@ -72,12 +74,15 @@ function parsePubMedXml(xml: string): PubMedArticle[] {
             const abstractText = extractXmlTag(block, 'AbstractText') || '';
             const journal = extractXmlTag(block, 'Title') || '';
             const year = extractXmlTag(block, 'Year') || '';
+            const publicationTypes = [...block.matchAll(/<PublicationType[^>]*>([^<]+)<\/PublicationType>/gi)]
+                .map(match => cleanXmlText(match[1]));
 
             // Get first author
             const lastNameMatch = block.match(/<LastName>([^<]+)<\/LastName>/);
             const authors = lastNameMatch ? `${lastNameMatch[1]} et al.` : '';
 
-            if (title && abstractText) {
+            const isRetracted = publicationTypes.some(type => /retracted|retraction/i.test(type)) || /retracted publication/i.test(block);
+            if (title && abstractText && !isRetracted) {
                 articles.push({
                     pmid,
                     title: cleanXmlText(title),
@@ -85,6 +90,7 @@ function parsePubMedXml(xml: string): PubMedArticle[] {
                     authors,
                     journal: cleanXmlText(journal),
                     year,
+                    publicationTypes,
                 });
             }
         } catch {
@@ -115,20 +121,59 @@ function cleanXmlText(text: string): string {
  */
 function buildSearchQueries(deniedService: string, denialReason: string, cptCodes: string, icd10Codes: string): string[] {
     const queries: string[] = [];
+    const evidenceFilter = '(humans[MeSH Terms]) AND (systematic review[Publication Type] OR meta-analysis[Publication Type] OR practice guideline[Publication Type] OR randomized controlled trial[Publication Type] OR guideline[Publication Type])';
 
     // Primary: service + medical necessity + systematic review
-    queries.push(`${deniedService} medical necessity guidelines systematic review`);
+    queries.push(`(${deniedService}) AND medical necessity AND ${evidenceFilter}`);
 
     // Evidence for the specific service
-    queries.push(`${deniedService} clinical outcomes evidence-based`);
+    queries.push(`(${deniedService}) AND clinical outcomes AND evidence-based AND ${evidenceFilter}`);
 
     // Address the denial reason specifically
     if (denialReason) {
         const shortReason = denialReason.substring(0, 100);
-        queries.push(`${deniedService} ${shortReason} coverage criteria`);
+        queries.push(`(${deniedService}) AND (${shortReason}) AND coverage criteria AND humans[MeSH Terms]`);
+    }
+    if (cptCodes || icd10Codes) {
+        queries.push(`(${deniedService}) AND (${cptCodes} ${icd10Codes}) AND medical policy AND humans[MeSH Terms]`);
     }
 
     return queries;
+}
+
+function evidenceLevel(publicationTypes: string[]): string {
+    const joined = publicationTypes.join(' ').toLowerCase();
+    if (/practice guideline|guideline/.test(joined)) return 'Guideline';
+    if (/systematic review|meta-analysis/.test(joined)) return 'Systematic review/meta-analysis';
+    if (/randomized controlled trial/.test(joined)) return 'Randomized controlled trial';
+    if (/clinical trial/.test(joined)) return 'Clinical trial';
+    return 'Peer-reviewed article';
+}
+
+const RELEVANCE_STOP_WORDS = new Set([
+    'the', 'and', 'for', 'with', 'that', 'this', 'from', 'when', 'then', 'than', 'medical',
+    'necessity', 'guidelines', 'guideline', 'coverage', 'criteria', 'clinical', 'outcomes',
+    'evidence', 'based', 'requested', 'procedure', 'service', 'does', 'meet', 'not',
+]);
+
+function relevanceTokens(...values: string[]): string[] {
+    return [...new Set(values
+        .join(' ')
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .map(t => t.trim())
+        .filter(t => t.length >= 4 && !RELEVANCE_STOP_WORDS.has(t) && !/^\d+$/.test(t)))];
+}
+
+function isRelevantArticle(article: PubMedArticle, deniedService: string, denialReason: string, icd10Codes: string): boolean {
+    const serviceTokens = relevanceTokens(deniedService);
+    const contextTokens = relevanceTokens(deniedService, denialReason, icd10Codes);
+    const articleText = `${article.title} ${article.abstract}`.toLowerCase();
+    const serviceMatches = serviceTokens.filter(token => articleText.includes(token)).length;
+    const contextMatches = contextTokens.filter(token => articleText.includes(token)).length;
+
+    // Require direct service relevance, or multiple broader context overlaps.
+    return serviceMatches >= 1 || contextMatches >= 3;
 }
 
 /**
@@ -161,7 +206,7 @@ export async function searchWebEvidence(
         if (seen.has(a.pmid)) return false;
         seen.add(a.pmid);
         return true;
-    });
+    }).filter(a => isRelevantArticle(a, deniedService, denialReason, icd10Codes));
 
     // Convert to WebEvidence format
     const evidence: WebEvidence[] = uniqueArticles.slice(0, 5).map(a => ({
@@ -170,12 +215,13 @@ export async function searchWebEvidence(
         summary: a.abstract,
         citation: `${a.authors} ${a.journal}. ${a.year}. PMID: ${a.pmid}`,
         url: `https://pubmed.ncbi.nlm.nih.gov/${a.pmid}/`,
+        evidenceLevel: evidenceLevel(a.publicationTypes),
     }));
 
     // Format for prompt injection
     const formattedContext = evidence.length > 0
         ? evidence.map((e, i) =>
-            `[PubMed ${i + 1}] ${e.title}\nCitation: ${e.citation}\nURL: ${e.url}\n\nFindings: ${e.summary}`
+            `[PubMed ${i + 1}] ${e.title}\nEvidence Level: ${e.evidenceLevel}\nCitation: ${e.citation}\nURL: ${e.url}\n\nFindings: ${e.summary}`
         ).join('\n\n---\n\n')
         : '';
 

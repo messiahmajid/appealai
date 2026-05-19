@@ -48,7 +48,7 @@ APPEAL_LETTER_SYSTEM = """You are an expert physician advocate specializing in i
 
 4. **SOURCE-FAITHFUL CLINICAL DATA**: Only reference clinical findings (lab values, imaging results, exam findings, treatment history) that are explicitly documented in the provided clinical notes. Do not embellish or extrapolate.
 
-5. **FLAG UNCERTAINTY**: If the provided guidelines do not clearly support the requested service, or if clinical documentation is insufficient to meet a criterion, you MUST explicitly state this. Use the format: "[DOCUMENTATION GAP: description of what is missing]". Do NOT paper over gaps with assumptions.
+5. **HANDLE UNCERTAINTY WITHOUT WEAKENING THE APPEAL**: If the provided guidelines do not clearly support the requested service, or if clinical documentation is insufficient to meet a criterion, do NOT claim that criterion is fully met. Do NOT create a payer-facing section called "Documentation Gaps" and do NOT use bracketed "[DOCUMENTATION GAP]" language in the final letter. Instead, either omit the unsupported claim, state that the evidence supports a medically appropriate exception, or frame the issue as "Clinical Rationale for Exception" / "Additional Supporting Rationale" when that is accurate.
 
 6. **CITATION DISCIPLINE**: Every medical claim in your letter must be traceable to either:
    - A specific passage in the provided RAG guidelines (cite as [1], [2], etc.)
@@ -81,12 +81,14 @@ The letter must contain a dedicated section that:
 3. Directly rebuts each point with specific patient evidence
 4. Never uses circular reasoning (do not argue "the patient meets criteria because the criteria are met")
 
-## DOCUMENTATION GAP ANALYSIS
+## UNCERTAINTY AND EXCEPTION HANDLING
 
-When flagging documentation gaps with "[DOCUMENTATION GAP]":
-- Explain the CLINICAL SIGNIFICANCE of the missing data — why it matters for this patient's case
+When a payer criterion is not directly satisfied by the chart:
+- Do NOT create a separate "Documentation Gaps" section in the appeal letter.
+- Do NOT use bracketed documentation-gap tags in the appeal letter.
+- Explain the CLINICAL SIGNIFICANCE of the issue only if it helps the appeal.
 - If a risk factor or lab value strengthens the argument, explicitly connect it to the patient's overall clinical picture (e.g., "The patient's elevated HbA1c of 7.2% further increases ASCVD risk, strengthening the urgency of cardiac evaluation")
-- Suggest what additional documentation could address the gap
+- When appropriate, frame the issue as a step-therapy exception, clinical-inappropriateness rationale, or additional supporting rationale. Never present it as a concession that the appeal should be denied.
 
 ## LETTER REQUIREMENTS
 
@@ -100,7 +102,7 @@ Draft professional, medically rigorous appeal letters that:
 7. Include CPT and ICD-10 codes where applicable
 8. Conclude with a clear request for reconsideration
 
-If the provided guidelines are insufficient to build a strong case, state that honestly in the letter rather than fabricating support."""
+If the provided guidelines are insufficient to build a strong case, do not fabricate support. Handle the limitation by narrowing the claim, requesting a medically appropriate exception, or explaining why the available clinical record still supports reconsideration."""
 
 
 def build_appeal_prompt(
@@ -120,8 +122,36 @@ def build_appeal_prompt(
     practice_name: str,
     rag_context: str,
     web_evidence_context: str = "",
+    structured_analysis_context: str = "",
     parsed_data: str = "",
 ) -> str:
+    has_pubmed_evidence = bool(web_evidence_context.strip())
+    source_count_label = "THREE" if has_pubmed_evidence else "TWO"
+    source_c_rule = (
+        "\nSOURCE C (PubMed Literature): Contains peer-reviewed study findings. Use for: "
+        "additional evidence supporting medical necessity. Cite as [PubMed 1], [PubMed 2], etc."
+        if has_pubmed_evidence
+        else ""
+    )
+    cross_source_rule = (
+        "PMIDs come from Source C only. Patient dates/values come from Source A only. "
+        "Statistics and criteria come from Source B or C only."
+        if has_pubmed_evidence
+        else "Patient dates/values come from Source A only. Statistics and criteria come from Source B only."
+    )
+    pubmed_criterion_instruction = (
+        "\n- If PubMed evidence supports the point, cite as [PubMed 1], etc. (from SOURCE C only)"
+        if has_pubmed_evidence
+        else ""
+    )
+    traceable_sources = "SOURCE A, B, or C" if has_pubmed_evidence else "SOURCE A or B"
+    references_instruction = (
+        'End with a "References" section with two subsections:\n'
+        '- "Guidelines" listing all [1], [2], etc. citations\n'
+        '- "Literature" listing all [PubMed X] citations with PMID and URL'
+        if has_pubmed_evidence
+        else 'End with a "References" section listing guideline citations only. Do not create a Literature/PubMed subsection when no PubMed evidence was provided.'
+    )
     web_evidence_section = ""
     if web_evidence_context:
         web_evidence_section = f"""
@@ -134,15 +164,27 @@ RULES for PubMed citations:
 - Never write "the clinical notes reference PMID..." — PMIDs are from PubMed, not from the patient's chart
 {web_evidence_context}
 """
+    structured_analysis_section = ""
+    if structured_analysis_context:
+        structured_analysis_section = f"""
+== STRUCTURED CRITERIA ANALYSIS (Planning Aid — Not a Citable Source) ==
+This JSON was produced by deterministic preprocessing. Use it to organize the appeal, but cite only {traceable_sources}.
+If a criterion is marked "unclear" or "not_met", do not claim it is fully met. Use this internally to avoid unsupported claims. In the payer-facing letter, do NOT create a "Documentation Gaps" section; instead frame any limitation as exception rationale, clinical inappropriateness of the payer requirement, or additional supporting rationale when accurate.
+{structured_analysis_context}
+"""
 
-    return f"""Generate a Prior Authorization Appeal Letter. You have THREE separate data sources below. You MUST keep them strictly separated and never cross-attribute data between sources.
+    from datetime import date
+    today = date.today().strftime("%B %d, %Y")
+
+    return f"""Generate a Prior Authorization Appeal Letter. Today's date is {today}. You have {source_count_label} separate data sources below. You MUST keep them strictly separated and never cross-attribute data between sources.
 
 == DATA SOURCE RULES ==
 SOURCE A (Clinical Notes): Contains THIS PATIENT's specific medical data. Use for: dates, lab values, exam findings, treatment history, medications. Copy dates and values EXACTLY as written.
 SOURCE B (Medical Guidelines): Contains coverage criteria and medical evidence. Use for: approval criteria, policy requirements, statistics about procedures/tests. Cite as [1], [2], etc.
-SOURCE C (PubMed Literature): Contains peer-reviewed study findings. Use for: additional evidence supporting medical necessity. Cite as [PubMed 1], [PubMed 2], etc.
+PAYER DENIAL DETAILS: Contains the insurer's decision, requested item, plan criteria, missing documentation, appeal deadlines, and administrative identifiers. Use it to rebut the denial and identify payer requirements. Do NOT use it as proof of patient-specific clinical facts unless the same fact is also present in SOURCE A.
+{source_c_rule}
 
-CRITICAL: Never attribute data from one source to another. PMIDs come from Source C only. Patient dates/values come from Source A only. Statistics and criteria come from Source B or C only.
+CRITICAL: Never attribute data from one source to another. {cross_source_rule}
 
 == DENIAL INFORMATION ==
 Insurance Company: {insurance_company}
@@ -150,7 +192,10 @@ Denied Service: {denied_service}
 CPT Code(s): {cpt_code}
 Claim/Reference Number: {claim_number}
 Denial Date: {denial_date}
-Stated Reason for Denial: "{denial_reason}"
+Payer Denial Details:
+<<<DENIAL_DETAILS
+{denial_reason}
+DENIAL_DETAILS>>>
 
 == PATIENT INFORMATION ==
 Patient Name: {patient_name}
@@ -172,16 +217,18 @@ These are the ONLY coverage guidelines you may cite. Cite as [1], [2], etc.
 Only cite guidelines that are directly relevant to "{denied_service}". Skip any guidelines about unrelated procedures.
 {rag_context}
 {web_evidence_section}
+{structured_analysis_section}
 == INSTRUCTIONS ==
 Draft a complete appeal letter with this structure:
 
 **Section 1 — Header & Identification**
-- Proper letterhead (use physician/practice info)
+- Proper letterhead using the physician/practice info provided above
 - Patient identifiers, denied service, claim number
+- ONLY include fields that have actual values provided above. If a field was not provided (empty or missing), OMIT it entirely from the letter. NEVER use bracket placeholders like [Patient DOB] or [Address]. If the physician name is empty, omit the signature block name. If the practice address is not provided, omit the address line.
 
 **Section 2 — Purpose**
 - State this is an appeal of the denial
-- Quote the EXACT denial reason
+- Quote the core denial reason exactly. If a full denial block was provided, summarize the payer's plan criteria and missing-documentation assertions separately.
 
 **Section 3 — Clinical Summary**
 - Summarize the patient's relevant clinical history using ONLY data from SOURCE A
@@ -192,18 +239,18 @@ For EACH approval criterion in the relevant guideline from SOURCE B:
 - State the specific criterion
 - Present the patient's specific evidence that meets it (from SOURCE A, verbatim)
 - Explain WHY this evidence satisfies the criterion (explicit reasoning, not just juxtaposition)
-- Cite the guideline as [1], [2], etc.
-- If PubMed evidence supports the point, cite as [PubMed 1], etc. (from SOURCE C only)
+- Cite the guideline as [1], [2], etc.{pubmed_criterion_instruction}
 
 **Section 5 — Direct Denial Rebuttal**
-- Address each element of the denial reason specifically
+- Address each element of the payer denial details specifically, including plan criteria and missing-documentation assertions when provided
 - Do NOT use circular reasoning — explain WHY the criteria are met, don't just assert they are
 - Connect risk factors (lab values, comorbidities) to clinical urgency with explicit reasoning
 
-**Section 6 — Documentation Gaps**
-- If any criterion cannot be fully met, include "[DOCUMENTATION GAP]"
-- Explain the clinical significance of the gap
-- Suggest what additional documentation could address it
+**Section 6 — Exception or Additional Supporting Rationale (only if needed)**
+- Do NOT title any payer-facing section "Documentation Gaps".
+- Do NOT include bracketed "[DOCUMENTATION GAP]" text.
+- If a payer requirement is not directly satisfied but the chart supports an exception, use a persuasive heading such as "Clinical Rationale for Step-Therapy Exception" or "Additional Supporting Rationale".
+- If no exception rationale is needed, omit this section entirely.
 
 **Section 7 — Supporting Documentation & Close**
 - List enclosed documents
@@ -212,12 +259,11 @@ For EACH approval criterion in the relevant guideline from SOURCE B:
 RULES:
 - Never mix sources: do not say "per clinical notes, PMID..." or attribute guideline statistics to the patient
 - Quote clinical findings EXACTLY as written in SOURCE A — do not paraphrase or add units not present
-- Every claim must be traceable to SOURCE A, B, or C
+- Every claim must be traceable to {traceable_sources}
+- ABSOLUTELY NO BRACKET PLACEHOLDERS. Never write [Address], [Phone], [DOB], [Date], [if known], [Current Date], [most recent], or ANY text inside square brackets that represents missing information. If a value was not provided, omit that line entirely. Use today's date ({today}) for the letter date. For the date of service, use the denial date or write "Pending" without brackets. The letter must look complete with no blanks.
 
-Format the letter professionally using markdown.
-End with a "References" section with two subsections:
-- "Guidelines" listing all [1], [2], etc. citations
-- "Literature" listing all [PubMed X] citations with PMID and URL"""
+Format the letter professionally using markdown. Use bold for section headers and key terms.
+{references_instruction}"""
 
 
 VERIFICATION_SYSTEM = """You are a medical accuracy reviewer specializing in prior authorization appeal letters. Your role is to verify that an appeal letter is medically sound by checking it against source materials.
@@ -242,7 +288,7 @@ def build_verification_prompt(
 == SOURCE GUIDELINES (RAG Retrieved) ==
 {rag_context}
 
-== DENIAL REASON ==
+== PAYER DENIAL DETAILS ==
 {denial_reason}
 
 == VERIFICATION CHECKLIST ==
@@ -252,11 +298,11 @@ For each item, determine if the letter passes or fails:
 
 2. **Guideline Citation Accuracy**: Are ALL guidelines, criteria, and policy references cited in the letter actually present in the provided RAG guidelines? Flag any fabricated or hallucinated guideline references.
 
-3. **No Fabricated Claims**: Does the letter contain any medical claims, study references, or approval criteria NOT supported by either the clinical notes or the provided guidelines?
+3. **No Fabricated Claims**: Does the letter contain any medical claims, study references, payer criteria, or approval criteria NOT supported by the clinical notes, payer denial details, or provided guidelines?
 
-4. **Denial Reason Addressed**: Does the letter directly and specifically address the stated denial reason?
+4. **Denial Reason Addressed**: Does the letter directly and specifically address the payer denial details?
 
-5. **Documentation Gaps Acknowledged**: If the clinical documentation is insufficient to meet certain criteria, does the letter acknowledge this rather than making unsupported claims?
+5. **Uncertainty Handled Safely**: If the clinical documentation is insufficient to meet certain criteria, does the letter avoid unsupported claims and frame any exception rationale appropriately without creating a payer-facing "Documentation Gaps" concession?
 
 Respond in this exact JSON format:
 {{
@@ -284,7 +330,7 @@ Respond in this exact JSON format:
       "details": "Specific explanation"
     }},
     {{
-      "check": "Documentation Gaps Acknowledged",
+      "check": "Uncertainty Handled Safely",
       "status": "PASS" | "FAIL" | "WARNING",
       "details": "Specific explanation"
     }}
@@ -292,6 +338,46 @@ Respond in this exact JSON format:
   "flaggedIssues": ["List of specific problems found, empty array if none"],
   "summary": "Brief overall assessment"
 }}"""
+
+
+APPEAL_REPAIR_SYSTEM = """You repair prior authorization appeal letters after deterministic medical-safety checks.
+
+Rules:
+- Preserve supported clinical facts, guideline citations, and professional tone.
+- Remove unresolved placeholders and invalid citations.
+- Remove or soften any unsupported quoted or numeric claims.
+- Do not add new clinical facts, new guideline names, new citations, or new statistics.
+- If a needed fact is not supported by the supplied sources, remove or soften the claim. Do NOT add a payer-facing "Documentation Gaps" section or bracketed "[DOCUMENTATION GAP]" text. If the limitation must be discussed, frame it as exception rationale or additional supporting rationale."""
+
+
+def build_repair_prompt(
+    *,
+    letter: str,
+    clinical_notes: str,
+    rag_context: str,
+    safety_report: dict,
+    web_evidence_context: str = "",
+) -> str:
+    import json
+
+    return f"""Repair the appeal letter so it passes deterministic safety checks.
+
+== ORIGINAL LETTER ==
+{letter}
+
+== CLINICAL NOTES ==
+{clinical_notes}
+
+== GUIDELINE CONTEXT ==
+{rag_context}
+
+== PUBMED CONTEXT ==
+{web_evidence_context}
+
+== SAFETY REPORT ==
+{json.dumps(safety_report, indent=2)}
+
+Return only the repaired letter in markdown."""
 
 
 APPEAL_ANALYSIS_SYSTEM = """You are a medical coding and insurance specialist. Analyze the provided clinical information and denial details to:

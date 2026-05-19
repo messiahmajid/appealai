@@ -44,6 +44,7 @@ export interface Appeal {
     citations: Citation[] | null;
     ragSources: RAGSource[] | null;
     analysisResult: string | null;
+    safetyReport: unknown | null;
 }
 
 export interface Citation {
@@ -88,7 +89,7 @@ function writeAppeals(appeals: Appeal[]): void {
     fs.renameSync(tempFile, APPEALS_FILE);
 }
 
-export function createAppeal(data: Omit<Appeal, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'generatedLetter' | 'citations' | 'ragSources' | 'analysisResult' | 'parsedClinicalData'>): Appeal {
+export function createAppeal(data: Omit<Appeal, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'generatedLetter' | 'citations' | 'ragSources' | 'analysisResult' | 'parsedClinicalData' | 'safetyReport'>): Appeal {
     const appeal: Appeal = {
         ...data,
         id: uuidv4(),
@@ -100,6 +101,7 @@ export function createAppeal(data: Omit<Appeal, 'id' | 'createdAt' | 'updatedAt'
         citations: null,
         ragSources: null,
         analysisResult: null,
+        safetyReport: null,
     };
 
     const appeals = readAppeals();

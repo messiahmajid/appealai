@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import structlog
 
-from app.services.llm import generate_embedding, generate_embeddings
+from app.services.llm import generate_embedding, generate_embeddings, is_embedding_available
 
 logger = structlog.get_logger()
 
@@ -93,17 +93,25 @@ async def initialize_rag() -> None:
     if _embedded_chunks is not None:
         return
 
+    from app.services.guidelines import get_guideline_chunks
+
+    current_chunks = get_guideline_chunks()
+    current_chunk_ids = {c.id for c in current_chunks}
+
     cached = _load_cached_embeddings()
-    if cached:
+    if cached and len(cached) == len(current_chunks) and all(c.id in current_chunk_ids for c in cached):
         _embedded_chunks = cached
         logger.info("loaded_cached_embeddings", count=len(cached))
         return
+    if cached:
+        logger.info("guideline_corpus_changed_regenerating_embeddings")
+
+    if not is_embedding_available():
+        logger.info("rag_embedding_unavailable", reason="no GOOGLE_GENERATIVE_AI_API_KEY, using keyword fallback")
+        return
 
     logger.info("generating_guideline_embeddings")
-    from app.services.guidelines import get_guideline_chunks
-
-    chunks = get_guideline_chunks()
-    texts = [c.text for c in chunks]
+    texts = [c.text for c in current_chunks]
 
     all_embeddings: list[list[float]] = []
     for i in range(0, len(texts), 10):
@@ -120,7 +128,7 @@ async def initialize_rag() -> None:
             source=chunk.source,
             embedding=all_embeddings[i],
         )
-        for i, chunk in enumerate(chunks)
+        for i, chunk in enumerate(current_chunks)
     ]
 
     _save_cached_embeddings(_embedded_chunks)

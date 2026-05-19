@@ -39,6 +39,7 @@ yarn-error.log*
 
 # architecture doc (local only)
 ARCHITECTURE.md
+.claude/
 
 # vercel
 .vercel

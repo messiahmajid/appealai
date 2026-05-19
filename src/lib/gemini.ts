@@ -3,7 +3,12 @@ import { GoogleGenerativeAI, EmbedContentRequest } from '@google/generative-ai';
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
 const GEMINI_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY || '';
+const GEMINI_TEXT_MODELS = (process.env.GEMINI_TEXT_MODELS || 'gemini-2.0-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash')
+    .split(',')
+    .map(model => model.trim())
+    .filter(Boolean);
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '';
+const MAX_INLINE_RATE_LIMIT_WAIT_SECONDS = 20;
 
 // ===== Anthropic client =====
 let anthropic: Anthropic | null = null;
@@ -85,6 +90,31 @@ async function generateViaOpenRouter(
     throw new Error('All OpenRouter free models are rate-limited. Please wait a moment and try again.');
 }
 
+function isRateLimitError(message: string): boolean {
+    const lower = message.toLowerCase();
+    return message.includes('429')
+        || lower.includes('rate limit')
+        || lower.includes('resource_exhausted')
+        || lower.includes('quota');
+}
+
+function retryDelaySeconds(message: string): number | null {
+    const patterns = [
+        /retryDelay['"]?\s*[:=]\s*['"]?(\d+)s/i,
+        /retry_delay\s*\{\s*seconds:\s*(\d+)/i,
+        /Retry-After['"]?\s*[:=]\s*['"]?(\d+)/i,
+    ];
+    for (const pattern of patterns) {
+        const match = message.match(pattern);
+        if (match) return Number(match[1]);
+    }
+    return null;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // ===== Main text generation =====
 // Priority: Anthropic (Haiku) → Gemini → OpenRouter
 export async function generateText(
@@ -126,21 +156,36 @@ export async function generateText(
     // Priority 2: Gemini
     if (isGeminiKeyConfigured()) {
         const client = getGeminiClient();
-        try {
-            const model = client.getGenerativeModel({
-                model: 'gemini-2.0-flash-lite',
-                systemInstruction: systemPrompt,
-                generationConfig: { temperature, maxOutputTokens: 8192 },
-            });
-            const result = await model.generateContent(userPrompt);
-            console.log('Generated with Gemini 2.0 Flash-Lite');
-            return result.response.text();
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (msg.includes('429')) {
-                console.log('Gemini rate-limited, falling back to OpenRouter...');
-            } else {
-                console.error('Gemini error:', msg);
+        for (const modelName of GEMINI_TEXT_MODELS) {
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+                try {
+                    const model = client.getGenerativeModel({
+                        model: modelName,
+                        systemInstruction: systemPrompt,
+                        generationConfig: { temperature, maxOutputTokens: 8192 },
+                    });
+                    const result = await model.generateContent(userPrompt);
+                    console.log(`Generated with Gemini model: ${modelName}`);
+                    return result.response.text();
+                } catch (err: unknown) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    if (isRateLimitError(msg)) {
+                        const retryAfter = retryDelaySeconds(msg);
+                        if (
+                            attempt === 0
+                            && retryAfter !== null
+                            && retryAfter <= MAX_INLINE_RATE_LIMIT_WAIT_SECONDS
+                        ) {
+                            console.log(`Gemini model ${modelName} rate-limited; retrying after ${retryAfter}s...`);
+                            await sleep(retryAfter * 1000);
+                            continue;
+                        }
+                        console.log(`Gemini model ${modelName} rate-limited, trying next fallback...`);
+                        break;
+                    }
+                    console.error(`Gemini model ${modelName} error:`, msg);
+                    break;
+                }
             }
         }
     }
@@ -150,10 +195,16 @@ export async function generateText(
         return await generateViaOpenRouter(systemPrompt, userPrompt, temperature);
     }
 
-    throw new Error(
-        'No API keys configured. Add ANTHROPIC_API_KEY to .env.local ' +
-        '(or GOOGLE_GENERATIVE_AI_API_KEY / OPENROUTER_API_KEY as free fallbacks).'
-    );
+    if (isGeminiKeyConfigured()) {
+        throw new Error(
+            'Gemini API is rate-limited for this project. This may be a per-minute, ' +
+            'per-token-minute, or daily quota, so waiting one minute may not be enough. ' +
+            'Check AI Studio rate limits, wait for quota reset, or add ANTHROPIC_API_KEY / ' +
+            'OPENROUTER_API_KEY to .env.local as a fallback.'
+        );
+    }
+
+    throw new Error('No API keys configured. Add ANTHROPIC_API_KEY to .env.local (or GOOGLE_GENERATIVE_AI_API_KEY / OPENROUTER_API_KEY as free fallbacks).');
 }
 
 // ===== Embeddings (Gemini only) =====

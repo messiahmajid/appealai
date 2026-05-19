@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import ReactMarkdown from 'react-markdown';
@@ -12,12 +12,12 @@ import {
     ChevronLeft,
     Check,
     Search,
-    X,
     ClipboardCopy,
     Download,
     ArrowLeft,
 } from 'lucide-react';
 import { SAMPLE_CASES } from '@/lib/sample-data';
+import { mergeDetails, parseClinicalNoteDetails, parseDenialDetails, type ParsedDetails } from '@/lib/detail-parser';
 
 interface MedicalCode {
     code: string;
@@ -54,6 +54,53 @@ interface VerificationResult {
     summary: string;
 }
 
+interface SafetyReport {
+    verdict: 'PASS' | 'NEEDS_REVIEW' | 'FAIL';
+    issues: Array<{ code: string; severity: 'error' | 'warning'; message: string; evidence?: string }>;
+    structuredAnalysis?: {
+        criteria?: Array<{ criterion: string; status: 'met' | 'unclear' | 'not_met'; evidenceSpanIds: string[]; missingElements: string[]; guidelineTitle: string }>;
+        documentationGaps?: string[];
+        contraindicationWarnings?: string[];
+        policyMetadata?: Array<{ title: string; source: string; effectiveDate: string; freshnessStatus: string }>;
+    };
+    repairAttempted?: boolean;
+}
+
+interface ClinicalSufficiencyReport {
+    status: 'pass' | 'needs_review' | 'block';
+    score: number;
+    summary: string;
+    presentElements: string[];
+    missingElements: string[];
+    blockingReasons: string[];
+    suggestions: string[];
+    warnings: string[];
+}
+
+type GenerationStageStatus = 'pending' | 'active' | 'done' | 'error';
+
+interface GenerationStage {
+    id: string;
+    label: string;
+    status: GenerationStageStatus;
+    detail?: string;
+}
+
+interface ProgressEventPayload {
+    stage: string;
+    message: string;
+    data?: Record<string, unknown>;
+}
+
+const DEFAULT_GENERATION_STAGES: GenerationStage[] = [
+    { id: 'guidelines', label: 'Retrieve policies', status: 'pending' },
+    { id: 'sufficiency', label: 'Check notes', status: 'pending' },
+    { id: 'pubmed', label: 'Search PubMed', status: 'pending' },
+    { id: 'generation', label: 'Generate draft', status: 'pending' },
+    { id: 'safety', label: 'Run safety checks', status: 'pending' },
+    { id: 'save', label: 'Save result', status: 'pending' },
+];
+
 // Separate component that uses useSearchParams
 function NewAppealContent() {
     const router = useRouter();
@@ -64,6 +111,8 @@ function NewAppealContent() {
     // Step 1: Clinical Notes
     const [clinicalNotes, setClinicalNotes] = useState('');
     const [fileName, setFileName] = useState('');
+    const [isExtractingFile, setIsExtractingFile] = useState(false);
+    const [fileError, setFileError] = useState('');
 
     // Step 2: Denial Details
     const [patientName, setPatientName] = useState('');
@@ -79,6 +128,7 @@ function NewAppealContent() {
     const [physicianName, setPhysicianName] = useState('');
     const [physicianNPI, setPhysicianNPI] = useState('');
     const [practiceName, setPracticeName] = useState('');
+    const [parsedDetailNotice, setParsedDetailNotice] = useState('');
 
     // CPT/ICD Autocomplete
     const [cptSearch, setCptSearch] = useState('');
@@ -98,8 +148,11 @@ function NewAppealContent() {
     const [error, setError] = useState('');
     const [appealId, setAppealId] = useState('');
     const [webEvidence, setWebEvidence] = useState<{ source: string; title: string; citation: string; url: string }[]>([]);
+    const [safetyReport, setSafetyReport] = useState<SafetyReport | null>(null);
+    const [clinicalSufficiencyReport, setClinicalSufficiencyReport] = useState<ClinicalSufficiencyReport | null>(null);
     const [copied, setCopied] = useState(false);
     const [loadingStep, setLoadingStep] = useState('');
+    const [generationStages, setGenerationStages] = useState<GenerationStage[]>(DEFAULT_GENERATION_STAGES);
     const [verification, setVerification] = useState<VerificationResult | null>(null);
     const [isVerifying, setIsVerifying] = useState(false);
 
@@ -163,69 +216,274 @@ function NewAppealContent() {
     }, [icd10Search]);
 
     // File handling
-    const handleFileDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         const file = e.dataTransfer.files[0];
         if (file) readFile(file);
-    }, []);
+    };
 
-    const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) readFile(file);
-    }, []);
+    };
 
-    const readFile = (file: File) => {
-        setFileName(file.name);
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            setClinicalNotes(e.target?.result as string || '');
+    function applyClinicalNoteParsedDetails(text: string) {
+        const details = parseClinicalNoteDetails(text);
+        let applied = 0;
+        const setIfEmpty = (value: string | undefined, current: string, setter: (value: string) => void) => {
+            if (value && !current.trim()) {
+                setter(value);
+                applied += 1;
+            }
         };
-        reader.readAsText(file);
+
+        setIfEmpty(details.patientName, patientName, setPatientName);
+        setIfEmpty(details.patientDOB, patientDOB, setPatientDOB);
+        setIfEmpty(details.memberId, memberId, setMemberId);
+        setIfEmpty(details.insuranceCompany, insuranceCompany, setInsuranceCompany);
+        setIfEmpty(details.deniedService, deniedService, setDeniedService);
+        setIfEmpty(details.icd10Codes, icd10Codes, setIcd10Codes);
+        setIfEmpty(details.physicianName, physicianName, setPhysicianName);
+        setIfEmpty(details.practiceName, practiceName, setPracticeName);
+
+        if (applied > 0) {
+            setParsedDetailNotice(`Filled ${applied} detail${applied === 1 ? '' : 's'} from the clinical notes.`);
+        }
+    }
+
+    const readFile = async (file: File) => {
+        setFileName(file.name);
+        setFileError('');
+        setIsExtractingFile(true);
+        try {
+            if (/\.(txt|md|csv)$/i.test(file.name) || file.type.startsWith('text/')) {
+                const text = await file.text();
+                setClinicalNotes(text);
+                setClinicalSufficiencyReport(null);
+                applyClinicalNoteParsedDetails(text);
+                return;
+            }
+
+            const response = await fetch('/api/clinical-notes/extract', {
+                method: 'POST',
+                headers: {
+                    'content-type': file.type || 'application/octet-stream',
+                    'x-file-name': file.name,
+                },
+                body: await file.arrayBuffer(),
+            });
+            const rawBody = await response.text();
+            let data: { text?: string; error?: string } = {};
+            try {
+                data = rawBody ? JSON.parse(rawBody) : {};
+            } catch {
+                data = { error: rawBody || 'Unable to extract text from file.' };
+            }
+            if (!response.ok) throw new Error(data.error || 'Unable to extract text from file.');
+            setClinicalNotes(data.text || '');
+            setClinicalSufficiencyReport(null);
+            applyClinicalNoteParsedDetails(data.text || '');
+        } catch (err) {
+            setClinicalNotes('');
+            setFileError(err instanceof Error ? err.message : 'Unable to extract text from file.');
+        } finally {
+            setIsExtractingFile(false);
+        }
+    };
+
+    const inferredDetails = useMemo(
+        () => mergeDetails(parseDenialDetails(denialReason), parseClinicalNoteDetails(clinicalNotes)),
+        [clinicalNotes, denialReason],
+    );
+
+    const applyParsedDetails = (details: ParsedDetails, overwrite = false) => {
+        let applied = 0;
+        const shouldApply = (value: string | undefined, current: string) => !!value && (overwrite || !current.trim());
+
+        if (shouldApply(details.patientName, patientName)) { setPatientName(details.patientName!); applied += 1; }
+        if (shouldApply(details.patientDOB, patientDOB)) { setPatientDOB(details.patientDOB!); applied += 1; }
+        if (shouldApply(details.memberId, memberId)) { setMemberId(details.memberId!); applied += 1; }
+        if (shouldApply(details.insuranceCompany, insuranceCompany)) { setInsuranceCompany(details.insuranceCompany!); applied += 1; }
+        if (shouldApply(details.claimNumber, claimNumber)) { setClaimNumber(details.claimNumber!); applied += 1; }
+        if (shouldApply(details.denialDate, denialDate)) { setDenialDate(details.denialDate!); applied += 1; }
+        if (shouldApply(details.deniedService, deniedService)) { setDeniedService(details.deniedService!); applied += 1; }
+        if (shouldApply(details.cptCodes, cptCodes)) { setCptCodes(details.cptCodes!); applied += 1; }
+        if (shouldApply(details.icd10Codes, icd10Codes)) { setIcd10Codes(details.icd10Codes!); applied += 1; }
+        if (shouldApply(details.physicianName, physicianName)) { setPhysicianName(details.physicianName!); applied += 1; }
+        if (shouldApply(details.practiceName, practiceName)) { setPracticeName(details.practiceName!); applied += 1; }
+
+        return applied;
+    };
+
+    useEffect(() => {
+        if (!denialReason.trim()) return;
+        const details = parseDenialDetails(denialReason);
+        const found = Object.entries(details).filter(([key, value]) => key !== 'denialReason' && !!value).length;
+        if (found === 0) return;
+        const applied = applyParsedDetails(details, true);
+        if (applied > 0) {
+            setParsedDetailNotice(`Auto-filled ${applied} detail${applied === 1 ? '' : 's'} from the pasted denial.`);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [denialReason]);
+
+    const buildAppealPayload = () => {
+        const denialDetails = parseDenialDetails(denialReason);
+        return {
+            clinicalNotes,
+            denialReason,
+            deniedService: deniedService || inferredDetails.deniedService || '',
+            cptCodes: denialDetails.cptCodes || cptCodes || inferredDetails.cptCodes || '',
+            icd10Codes: denialDetails.icd10Codes || icd10Codes || inferredDetails.icd10Codes || '',
+            insuranceCompany: insuranceCompany || inferredDetails.insuranceCompany || '',
+            patientName: patientName || inferredDetails.patientName || '',
+            patientDOB: patientDOB || inferredDetails.patientDOB || '',
+            memberId: memberId || inferredDetails.memberId || '',
+            claimNumber: claimNumber || inferredDetails.claimNumber || '',
+            denialDate: denialDate || inferredDetails.denialDate || '',
+            physicianName: physicianName || inferredDetails.physicianName || '',
+            physicianNPI,
+            practiceName: practiceName || inferredDetails.practiceName || '',
+        };
+    };
+
+    const stageIdForEvent = (stage: string): string | null => {
+        if (stage.startsWith('guidelines')) return 'guidelines';
+        if (stage.startsWith('sufficiency')) return 'sufficiency';
+        if (stage.startsWith('pubmed')) return 'pubmed';
+        if (stage.startsWith('generation')) return 'generation';
+        if (stage.startsWith('safety') || stage.startsWith('repair')) return 'safety';
+        if (stage.startsWith('save') || stage === 'complete') return 'save';
+        return null;
+    };
+
+    const updateGenerationStage = (stage: string, message: string, status?: GenerationStageStatus) => {
+        const activeId = stageIdForEvent(stage);
+        if (!activeId) return;
+        const nextStatus = status || (stage.endsWith('_started') ? 'active' : stage === 'error' ? 'error' : 'done');
+        setGenerationStages(prev => prev.map(item => {
+            if (item.id === activeId) return { ...item, status: nextStatus, detail: message };
+            if (nextStatus === 'active' && item.status === 'active') return { ...item, status: 'done' };
+            return item;
+        }));
+        setLoadingStep(message);
+    };
+
+    const applyGeneratedAppealData = (data: {
+        letter?: string;
+        citations?: Citation[];
+        ragSources?: RAGSource[];
+        appealId?: string;
+        webEvidence?: { source: string; title: string; citation: string; url: string }[];
+        safetyReport?: SafetyReport;
+        clinicalSufficiencyReport?: ClinicalSufficiencyReport;
+    }) => {
+        setGeneratedLetter(data.letter || '');
+        setCitations(data.citations || []);
+        setRagSources(data.ragSources || []);
+        setAppealId(data.appealId || '');
+        setWebEvidence(data.webEvidence || []);
+        setSafetyReport(data.safetyReport || null);
+        setClinicalSufficiencyReport(data.clinicalSufficiencyReport || null);
     };
 
     // Generate appeal
     const handleGenerate = async () => {
         setIsGenerating(true);
         setError('');
+        setClinicalSufficiencyReport(null);
+        setGenerationStages(DEFAULT_GENERATION_STAGES.map(stage => ({ ...stage })));
         setStep(3);
-        setLoadingStep('Searching medical guidelines...');
+        setLoadingStep('Starting appeal generation...');
 
         try {
-            setTimeout(() => setLoadingStep('Retrieving PubMed evidence...'), 3000);
-            setTimeout(() => setLoadingStep('Generating appeal letter...'), 7000);
-
-            const response = await fetch('/api/generate-appeal', {
+            const response = await fetch('/api/generate-appeal/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    clinicalNotes,
-                    denialReason,
-                    deniedService,
-                    cptCodes,
-                    icd10Codes,
-                    insuranceCompany,
-                    patientName,
-                    patientDOB,
-                    memberId,
-                    claimNumber,
-                    denialDate,
-                    physicianName,
-                    physicianNPI,
-                    practiceName,
-                }),
+                body: JSON.stringify(buildAppealPayload()),
             });
 
-            if (!response.ok) {
-                const errData = await response.json();
+            if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
+                const errData = await response.json().catch(() => ({ error: 'Failed to start appeal generation stream' }));
+                if (errData.sufficiencyReport) {
+                    setClinicalSufficiencyReport(errData.sufficiencyReport);
+                    setStep(2);
+                    return;
+                }
                 throw new Error(errData.error || 'Failed to generate appeal');
             }
 
-            const data = await response.json();
-            setGeneratedLetter(data.letter);
-            setCitations(data.citations || []);
-            setRagSources(data.ragSources || []);
-            setAppealId(data.appealId);
-            setWebEvidence(data.webEvidence || []);
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let completed = false;
+            let streamAppealId = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                let separatorIndex = buffer.indexOf('\n\n');
+                while (separatorIndex !== -1) {
+                    const rawEvent = buffer.slice(0, separatorIndex).trim();
+                    buffer = buffer.slice(separatorIndex + 2);
+                    const dataLine = rawEvent.split('\n').find(line => line.startsWith('data: '));
+                    if (dataLine) {
+                        const event = JSON.parse(dataLine.slice(6)) as ProgressEventPayload;
+                        updateGenerationStage(event.stage, event.message, event.stage === 'error' ? 'error' : undefined);
+
+                        if (event.data?.appealId) {
+                            streamAppealId = event.data.appealId as string;
+                        }
+
+                        if (event.stage === 'error') {
+                            const report = event.data?.sufficiencyReport as ClinicalSufficiencyReport | undefined;
+                            if (report) {
+                                setClinicalSufficiencyReport(report);
+                                setStep(2);
+                                return;
+                            }
+                            throw new Error(event.message || 'Failed to generate appeal');
+                        }
+
+                        if (event.stage === 'complete') {
+                            applyGeneratedAppealData(event.data || {});
+                            updateGenerationStage('complete', event.message, 'done');
+                            completed = true;
+                        }
+                    }
+                    separatorIndex = buffer.indexOf('\n\n');
+                }
+            }
+
+            if (!completed && streamAppealId) {
+                updateGenerationStage('save_started', 'Stream interrupted — recovering result...', 'active');
+                for (let attempt = 0; attempt < 10; attempt++) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    try {
+                        const pollResp = await fetch(`/api/appeals/${streamAppealId}`);
+                        if (!pollResp.ok) continue;
+                        const appeal = await pollResp.json();
+                        if (appeal.status === 'completed' || appeal.status === 'failed') {
+                            applyGeneratedAppealData({
+                                letter: appeal.generatedLetter,
+                                citations: appeal.citations,
+                                ragSources: appeal.ragSources,
+                                appealId: appeal.id,
+                                safetyReport: appeal.safetyReport,
+                            });
+                            updateGenerationStage('complete', 'Appeal recovered.', 'done');
+                            completed = true;
+                            break;
+                        }
+                    } catch { /* retry */ }
+                }
+            }
+
+            if (!completed) {
+                throw new Error('Generation stream ended before the appeal was completed.');
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
@@ -240,12 +498,16 @@ function NewAppealContent() {
         setTimeout(() => setCopied(false), 3000);
     };
 
-    const handleDownload = () => {
-        const blob = new Blob([generatedLetter], { type: 'text/markdown' });
+    const handleDownloadWord = async () => {
+        if (!appealId) return;
+        if (safetyReport?.verdict === 'FAIL') return;
+        const response = await fetch(`/api/appeals/${appealId}/download`);
+        if (!response.ok) return;
+        const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `appeal-letter-${patientName.replace(/\s+/g, '-').toLowerCase()}.md`;
+        a.download = `appeal-letter-${patientName.replace(/\s+/g, '-').toLowerCase()}.docx`;
         a.click();
         URL.revokeObjectURL(url);
     };
@@ -259,8 +521,11 @@ function NewAppealContent() {
                 body: JSON.stringify({
                     letter: generatedLetter,
                     clinicalNotes,
-                    ragContext: ragSources.map(s => s.title).join('\n'),
+                    ragContext: '',
                     denialReason,
+                    deniedService: deniedService || inferredDetails.deniedService || '',
+                    cptCodes: cptCodes || inferredDetails.cptCodes || '',
+                    icd10Codes: icd10Codes || inferredDetails.icd10Codes || '',
                 }),
             });
 
@@ -296,7 +561,9 @@ function NewAppealContent() {
     };
 
     const canProceedStep1 = clinicalNotes.trim().length > 50;
-    const canProceedStep2 = denialReason.trim() && deniedService.trim() && patientName.trim();
+    const canProceedStep2 = Boolean(denialReason.trim()
+        && (deniedService.trim() || inferredDetails.deniedService)
+        && (patientName.trim() || inferredDetails.patientName));
 
     return (
         <div className="app-layout">
@@ -354,7 +621,7 @@ function NewAppealContent() {
                             <input
                                 id="file-input"
                                 type="file"
-                                accept=".txt,.md,.doc,.docx,.pdf"
+                                accept=".txt,.md,.csv,.docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                 onChange={handleFileSelect}
                                 style={{ display: 'none' }}
                             />
@@ -364,7 +631,7 @@ function NewAppealContent() {
                                     <div className="file-upload-text">
                                         <strong>{fileName}</strong> uploaded
                                     </div>
-                                    <div className="file-upload-hint">Click to upload a different file</div>
+                                    <div className="file-upload-hint">{isExtractingFile ? 'Extracting text...' : 'Click to upload a different file'}</div>
                                 </>
                             ) : (
                                 <>
@@ -372,9 +639,12 @@ function NewAppealContent() {
                                     <div className="file-upload-text">
                                         <strong>Click to upload</strong> or drag and drop
                                     </div>
-                                    <div className="file-upload-hint">TXT, MD, DOC files supported</div>
+                                    <div className="file-upload-hint">TXT, MD, CSV, DOCX, and text-based PDF files supported</div>
                                 </>
                             )}
+                        </div>
+                        <div style={{ fontSize: 12, color: fileError ? '#c53030' : 'var(--text-muted)', marginTop: 8 }}>
+                            {fileError || 'Supported uploads: TXT, MD, CSV, DOCX, and text-based PDF. Scanned PDFs need OCR first.'}
                         </div>
 
                         <div className="divider">or paste clinical notes below</div>
@@ -385,7 +655,10 @@ function NewAppealContent() {
                                 className="form-textarea"
                                 placeholder="Paste the clinical note, discharge summary, or consultation report here..."
                                 value={clinicalNotes}
-                                onChange={(e) => setClinicalNotes(e.target.value)}
+                                onChange={(e) => {
+                                    setClinicalNotes(e.target.value);
+                                    setClinicalSufficiencyReport(null);
+                                }}
                                 style={{ minHeight: 300, fontFamily: "'SF Mono', Menlo, monospace", fontSize: 13, lineHeight: 1.7 }}
                             />
                             <div className="form-helper">
@@ -396,8 +669,11 @@ function NewAppealContent() {
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                             <button
                                 className="btn btn-primary"
-                                disabled={!canProceedStep1}
-                                onClick={() => setStep(2)}
+                                disabled={!canProceedStep1 || isExtractingFile}
+                                onClick={() => {
+                                    applyClinicalNoteParsedDetails(clinicalNotes);
+                                    setStep(2);
+                                }}
                             >
                                 Continue <ChevronRight size={16} />
                             </button>
@@ -410,8 +686,42 @@ function NewAppealContent() {
                     <div className="card" style={{ maxWidth: 800 }}>
                         <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Denial Details</h2>
                         <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
-                            Enter the insurance denial information and patient details.
+                            Enter fields manually, or paste a full payer denial block and parse the details.
                         </p>
+
+                        {clinicalSufficiencyReport && (
+                            <div style={{
+                                border: '1px solid #f0b429',
+                                background: 'rgba(240, 180, 41, 0.08)',
+                                borderRadius: 8,
+                                padding: 14,
+                                marginBottom: 20,
+                            }}>
+                                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                                    <AlertCircle size={18} color="#a67c00" style={{ marginTop: 1, flexShrink: 0 }} />
+                                    <div>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#8a6500', marginBottom: 4 }}>
+                                            Clinical notes need more support before generation
+                                        </div>
+                                        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                                            {clinicalSufficiencyReport.summary} Score: {clinicalSufficiencyReport.score}/100.
+                                        </div>
+                                        {clinicalSufficiencyReport.blockingReasons.length > 0 && (
+                                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                                                <strong>Blocking issue:</strong> {clinicalSufficiencyReport.blockingReasons.join(' ')}
+                                            </div>
+                                        )}
+                                        {clinicalSufficiencyReport.suggestions.length > 0 && (
+                                            <ul style={{ margin: '8px 0 0 18px', padding: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                {clinicalSufficiencyReport.suggestions.slice(0, 5).map((suggestion, i) => (
+                                                    <li key={i} style={{ marginBottom: 4 }}>{suggestion}</li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Patient Info */}
                         <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -455,14 +765,23 @@ function NewAppealContent() {
                             <input className="form-input" value={deniedService} onChange={e => setDeniedService(e.target.value)} placeholder="e.g. Total Knee Arthroplasty, Right" />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Reason for Denial *</label>
+                            <label className="form-label">Denial Reason / Full Denial Details *</label>
                             <textarea
                                 className="form-textarea"
                                 value={denialReason}
-                                onChange={e => setDenialReason(e.target.value)}
-                                placeholder="Paste the exact denial reason from the insurance company's letter..."
-                                style={{ minHeight: 100 }}
+                                onChange={e => {
+                                    setDenialReason(e.target.value);
+                                    setParsedDetailNotice('');
+                                    setClinicalSufficiencyReport(null);
+                                }}
+                                placeholder="Paste the exact denial reason or the full payer denial details block, including plan criteria, missing documentation, appeal deadline, and recommended appeal focus..."
+                                style={{ minHeight: 160 }}
                             />
+                            {parsedDetailNotice && (
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                                    {parsedDetailNotice}
+                                </div>
+                            )}
                         </div>
 
                         {/* Medical Codes */}
@@ -578,6 +897,45 @@ function NewAppealContent() {
                                     Analyzing clinical notes, retrieving medical guidelines, and drafting your appeal.
                                     <br />This may take 15-30 seconds.
                                 </div>
+                                <div style={{ width: '100%', maxWidth: 520, margin: '24px auto 0', textAlign: 'left' }}>
+                                    {generationStages.map(stageItem => (
+                                        <div
+                                            key={stageItem.id}
+                                            style={{
+                                                display: 'grid',
+                                                gridTemplateColumns: '24px 1fr',
+                                                gap: 10,
+                                                alignItems: 'start',
+                                                padding: '8px 0',
+                                                borderBottom: '1px solid var(--border)',
+                                            }}
+                                        >
+                                            <div style={{
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: '50%',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                border: `1px solid ${stageItem.status === 'done' ? '#2d8e47' : stageItem.status === 'error' ? '#c53030' : 'var(--border)'}`,
+                                                color: stageItem.status === 'done' ? '#2d8e47' : stageItem.status === 'error' ? '#c53030' : 'var(--text-muted)',
+                                                fontSize: 11,
+                                            }}>
+                                                {stageItem.status === 'done' ? <Check size={13} /> : stageItem.status === 'error' ? '!' : stageItem.status === 'active' ? '...' : ''}
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: 13, fontWeight: 700, color: stageItem.status === 'active' ? 'var(--accent)' : 'var(--text-primary)' }}>
+                                                    {stageItem.label}
+                                                </div>
+                                                {stageItem.detail && (
+                                                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                                        {stageItem.detail}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         ) : error ? (
                             <div className="card" style={{ maxWidth: 600, textAlign: 'center', padding: 48 }}>
@@ -603,8 +961,8 @@ function NewAppealContent() {
                                         {copied ? <Check size={16} /> : <ClipboardCopy size={16} />}
                                         {copied ? 'Copied!' : 'Copy Letter'}
                                     </button>
-                                    <button className="btn btn-secondary" onClick={handleDownload}>
-                                        <Download size={16} /> Download Markdown
+                                    <button className="btn btn-secondary" onClick={handleDownloadWord} disabled={safetyReport?.verdict === 'FAIL'}>
+                                        <Download size={16} /> Download Word
                                     </button>
                                     {!verification && (
                                         <button
@@ -621,6 +979,29 @@ function NewAppealContent() {
                                 </div>
 
                                 <div className="result-layout">
+                                    {safetyReport && (
+                                        <div style={{ gridColumn: '1 / -1', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8, background: safetyReport.verdict === 'PASS' ? 'rgba(45,142,71,0.06)' : safetyReport.verdict === 'NEEDS_REVIEW' ? 'rgba(184,134,11,0.06)' : 'rgba(197,48,48,0.06)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: safetyReport.issues.length ? 8 : 0 }}>
+                                                <div style={{ fontSize: 13, fontWeight: 700, color: safetyReport.verdict === 'PASS' ? '#2d8e47' : safetyReport.verdict === 'NEEDS_REVIEW' ? '#a67c00' : '#c53030' }}>
+                                                    Safety: {safetyReport.verdict === 'PASS' ? 'Pass' : safetyReport.verdict === 'NEEDS_REVIEW' ? 'Needs Review' : 'Failed'}
+                                                    {safetyReport.repairAttempted ? ' after repair attempt' : ''}
+                                                </div>
+                                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                                    {safetyReport.structuredAnalysis?.criteria?.filter(c => c.status === 'met').length || 0} criteria matched
+                                                </div>
+                                            </div>
+                                            {safetyReport.issues.slice(0, 5).map((issue, i) => (
+                                                <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                                                    <strong>{issue.severity.toUpperCase()}:</strong> {issue.message}{issue.evidence ? ` (${issue.evidence})` : ''}
+                                                </div>
+                                            ))}
+                                            {safetyReport.structuredAnalysis?.documentationGaps?.slice(0, 4).map((gap, i) => (
+                                                <div key={`gap-${i}`} style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                                                    <strong>Gap:</strong> {gap}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                     {/* Letter */}
                                     <div className="letter-container">
                                         <ReactMarkdown>{generatedLetter}</ReactMarkdown>
@@ -629,10 +1010,10 @@ function NewAppealContent() {
                                     {/* Citations Sidebar */}
                                     <div className="citation-sidebar">
                                         <h3 style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>
-                                            RAG Sources
+                                            Coverage Criteria Used
                                         </h3>
                                         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-                                            Medical guidelines retrieved and cited in this letter.
+                                            Medical necessity policies and guideline criteria used in this letter.
                                         </p>
 
                                         {citations.map(c => (
@@ -654,7 +1035,7 @@ function NewAppealContent() {
                                                     PubMed Literature
                                                 </h3>
                                                 <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-                                                    Peer-reviewed studies retrieved from PubMed.
+                                                    Peer-reviewed studies retrieved from PubMed. Items marked retrieved only were not cited in the letter.
                                                 </p>
                                                 {webEvidence.map((e, i) => (
                                                     <div key={i} className="citation-item">
@@ -662,6 +1043,9 @@ function NewAppealContent() {
                                                             <span className="citation-index" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>P{i + 1}</span>
                                                             <div>
                                                                 <div className="citation-title">{e.title}</div>
+                                                                <div style={{ fontSize: 11, fontWeight: 700, color: generatedLetter.includes(`[PubMed ${i + 1}]`) ? '#2d8e47' : 'var(--text-muted)', marginTop: 2 }}>
+                                                                    {generatedLetter.includes(`[PubMed ${i + 1}]`) ? 'Cited in letter' : 'Retrieved only'}
+                                                                </div>
                                                                 <div className="citation-source">{e.citation}</div>
                                                                 <a
                                                                     href={e.url}
@@ -691,6 +1075,20 @@ function NewAppealContent() {
                                                         <span style={{ fontWeight: 700, color: s.relevanceScore > 0.7 ? '#2d8e47' : s.relevanceScore > 0.4 ? '#b8860b' : 'var(--text-muted)' }}>
                                                             {(s.relevanceScore * 100).toFixed(0)}%
                                                         </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {safetyReport?.structuredAnalysis?.policyMetadata && safetyReport.structuredAnalysis.policyMetadata.length > 0 && (
+                                            <div style={{ marginTop: 16, padding: '12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
+                                                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+                                                    Policy Freshness
+                                                </div>
+                                                {safetyReport.structuredAnalysis.policyMetadata.map((p, i) => (
+                                                    <div key={i} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
+                                                        <div style={{ fontWeight: 600 }}>{p.title}</div>
+                                                        <div style={{ color: 'var(--text-muted)' }}>{p.source} · Effective {p.effectiveDate} · {p.freshnessStatus.replace('_', ' ')}</div>
                                                     </div>
                                                 ))}
                                             </div>

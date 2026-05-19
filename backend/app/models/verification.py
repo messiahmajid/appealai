@@ -8,6 +8,9 @@ class VerifyRequest(BaseModel):
     clinical_notes: str = Field(..., alias="clinicalNotes")
     rag_context: str = Field(default="", alias="ragContext")
     denial_reason: str = Field(..., alias="denialReason")
+    denied_service: str = Field(default="", alias="deniedService")
+    cpt_codes: str = Field(default="", alias="cptCodes")
+    icd10_codes: str = Field(default="", alias="icd10Codes")
 
     model_config = ConfigDict(populate_by_name=True)
 

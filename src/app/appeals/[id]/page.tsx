@@ -37,6 +37,16 @@ interface Appeal {
     generatedLetter: string | null;
     citations: Array<{ index: number; guidelineId: string; title: string; source: string; text: string }> | null;
     ragSources: Array<{ guidelineId: string; title: string; source: string; relevanceScore: number }> | null;
+    safetyReport: {
+        verdict: 'PASS' | 'NEEDS_REVIEW' | 'FAIL';
+        issues: Array<{ code: string; severity: 'error' | 'warning'; message: string; evidence?: string }>;
+        structuredAnalysis?: {
+            documentationGaps?: string[];
+            policyMetadata?: Array<{ title: string; source: string; effectiveDate: string; freshnessStatus: string }>;
+            criteria?: Array<{ status: 'met' | 'unclear' | 'not_met' }>;
+        };
+        repairAttempted?: boolean;
+    } | null;
     createdAt: string;
 }
 
@@ -49,11 +59,13 @@ export default function AppealDetailPage() {
     const [activeTab, setActiveTab] = useState<'letter' | 'notes' | 'denial'>('letter');
 
     useEffect(() => {
-        fetch(`/api/appeals`)
-            .then(r => r.json())
+        fetch(`/api/appeals/${params.id}`)
+            .then(r => {
+                if (!r.ok) throw new Error('Not found');
+                return r.json();
+            })
             .then(data => {
-                const found = (data.appeals || []).find((a: Appeal) => a.id === params.id);
-                setAppeal(found || null);
+                setAppeal(data);
                 setLoading(false);
             })
             .catch(() => setLoading(false));
@@ -67,13 +79,16 @@ export default function AppealDetailPage() {
         }
     };
 
-    const handleDownload = () => {
+    const handleDownload = async () => {
         if (!appeal?.generatedLetter) return;
-        const blob = new Blob([appeal.generatedLetter], { type: 'text/markdown' });
+        if (appeal.safetyReport?.verdict === 'FAIL') return;
+        const response = await fetch(`/api/appeals/${appeal.id}/download`);
+        if (!response.ok) return;
+        const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `appeal-${appeal.patientName.replace(/\s+/g, '-').toLowerCase()}.md`;
+        a.download = `appeal-letter-${appeal.patientName.replace(/\s+/g, '-').toLowerCase()}.docx`;
         a.click();
         URL.revokeObjectURL(url);
     };
@@ -187,11 +202,34 @@ export default function AppealDetailPage() {
                                 {copied ? <Check size={14} /> : <ClipboardCopy size={14} />}
                                 {copied ? 'Copied!' : 'Copy'}
                             </button>
-                            <button className="btn btn-secondary btn-sm" onClick={handleDownload}>
+                            <button className="btn btn-secondary btn-sm" onClick={handleDownload} disabled={appeal.safetyReport?.verdict === 'FAIL'}>
                                 <Download size={14} /> Download
                             </button>
                         </div>
                         <div className="result-layout">
+                            {appeal.safetyReport && (
+                                <div style={{ gridColumn: '1 / -1', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8, background: appeal.safetyReport.verdict === 'PASS' ? 'rgba(45,142,71,0.06)' : appeal.safetyReport.verdict === 'NEEDS_REVIEW' ? 'rgba(184,134,11,0.06)' : 'rgba(197,48,48,0.06)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: appeal.safetyReport.verdict === 'PASS' ? '#2d8e47' : appeal.safetyReport.verdict === 'NEEDS_REVIEW' ? '#a67c00' : '#c53030' }}>
+                                            Safety: {appeal.safetyReport.verdict === 'PASS' ? 'Pass' : appeal.safetyReport.verdict === 'NEEDS_REVIEW' ? 'Needs Review' : 'Failed'}
+                                            {appeal.safetyReport.repairAttempted ? ' after repair attempt' : ''}
+                                        </div>
+                                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                            {appeal.safetyReport.structuredAnalysis?.criteria?.filter(c => c.status === 'met').length || 0} criteria matched
+                                        </div>
+                                    </div>
+                                    {appeal.safetyReport.issues?.slice(0, 5).map((issue, i) => (
+                                        <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                                            <strong>{issue.severity.toUpperCase()}:</strong> {issue.message}{issue.evidence ? ` (${issue.evidence})` : ''}
+                                        </div>
+                                    ))}
+                                    {appeal.safetyReport.structuredAnalysis?.documentationGaps?.slice(0, 4).map((gap, i) => (
+                                        <div key={`gap-${i}`} style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                                            <strong>Gap:</strong> {gap}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             <div className="letter-container">
                                 <ReactMarkdown>{appeal.generatedLetter}</ReactMarkdown>
                             </div>
@@ -199,7 +237,7 @@ export default function AppealDetailPage() {
                                 <div className="citation-sidebar">
                                     <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>
                                         <Sparkles size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
-                                        RAG Sources
+                                        Coverage Criteria Used
                                     </h3>
                                     {appeal.citations.map(c => (
                                         <div key={c.index} className="citation-item">
@@ -212,6 +250,19 @@ export default function AppealDetailPage() {
                                             </div>
                                         </div>
                                     ))}
+                                    {appeal.safetyReport?.structuredAnalysis?.policyMetadata && appeal.safetyReport.structuredAnalysis.policyMetadata.length > 0 && (
+                                        <div style={{ marginTop: 16, padding: '12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
+                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+                                                Policy Freshness
+                                            </div>
+                                            {appeal.safetyReport.structuredAnalysis.policyMetadata.map((p, i) => (
+                                                <div key={i} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
+                                                    <div style={{ fontWeight: 600 }}>{p.title}</div>
+                                                    <div style={{ color: 'var(--text-muted)' }}>{p.source} · Effective {p.effectiveDate} · {p.freshnessStatus.replace('_', ' ')}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

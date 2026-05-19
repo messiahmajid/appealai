@@ -1,60 +1,114 @@
 # AppealAI
 
-AI-powered insurance prior authorization appeal letter generator. Upload clinical notes, enter denial details, and get a professionally structured appeal letter grounded in real medical guidelines and peer-reviewed literature.
+AppealAI helps clinicians and care teams draft insurance prior authorization appeal letters from clinical notes and denial details.
 
-## The Problem
+The app is built to do three things well:
 
-Insurance companies deny **15-20% of all prior authorization requests** in the US healthcare system. When a claim is denied, physicians must write detailed appeal letters that map the patient's clinical findings to the insurer's exact coverage criteria — citing CMS policies, NCCN guidelines, and medical literature.
+- turn messy clinical notes into a structured, payer-ready appeal;
+- keep the letter grounded in the uploaded chart, denial text, and retrieved policy sources;
+- make the generation process transparent with progress steps, safety checks, and downloadable Word output.
 
-This process takes **30-60 minutes per letter**, pulls physicians away from patient care, and is error-prone. A misquoted lab value, a wrong guideline citation, or a missed approval criterion means the appeal gets denied again — delaying or preventing medically necessary care.
-
-Despite this, **50-70% of denied claims are overturned on appeal** when the documentation is right.
-
-**AppealAI reduces this to under 2 minutes** while producing letters that are more thorough and better-cited than most manually written appeals.
+AppealAI is drafting support software. It is not a medical decision-maker, legal advice, or a substitute for clinician review before submission.
 
 ## What It Does
 
-1. **Upload clinical notes** — paste or drag-drop physician notes, discharge summaries, or consultation reports
-2. **Enter denial details** — patient info, insurance company, denied service, denial reason, CPT/ICD-10 codes (with autocomplete)
-3. **Generate appeal letter** — AI produces a structured letter with:
-   - Criterion-by-criterion mapping of patient findings to coverage guidelines
-   - Direct point-by-point rebuttal of the denial reason
-   - Real citations from CMS NCDs/LCDs, NCCN guidelines, and payer policies
-   - Live PubMed literature references with PMIDs
-   - Documentation gap flagging where clinical evidence is insufficient
-4. **Verify accuracy** — optional AI-powered accuracy check that cross-references the letter against the source clinical notes and guidelines
-5. **Export** — copy to clipboard or download as markdown
+AppealAI takes:
 
-## Key Features
+- clinical notes, uploaded as `.txt`, `.md`, `.csv`, `.docx`, or text-based `.pdf`;
+- payer denial details copied from the denial letter or portal;
+- patient, payer, provider, CPT/HCPCS, ICD-10, and requested-service information.
 
-- **Anti-hallucination system** — 5-layer safeguard ensures every claim is traceable to the clinical notes, medical guidelines, or peer-reviewed literature. No fabricated statistics, no made-up guideline references.
-- **RAG over 11 medical guidelines** — coverage criteria for CT, MRI, PET/CT, total knee arthroplasty, spinal fusion, cardiac catheterization, NSCLC staging, biologic DMARDs, power mobility devices, bariatric surgery, and sleep studies. Each guideline includes evidence-based statistics from landmark studies.
-- **Live PubMed search** — queries NCBI E-utilities API (free, no key needed) for relevant peer-reviewed studies before each generation.
-- **Multi-model LLM support** — Claude 3.5 Haiku (primary) with automatic fallback to Gemini Flash-Lite and OpenRouter free models.
-- **Evaluation harness** — deterministic 50+ scenario suite across 11 medical policy areas, plus API and retrieval tests.
-- **Appeal history** — browse, search, and revisit previously generated appeals.
+It produces:
+
+- a complete appeal letter;
+- criterion-by-criterion medical necessity reasoning;
+- direct rebuttal of payer denial reasons;
+- citations to retrieved guideline/policy sources;
+- optional PubMed literature support when relevant articles are found;
+- a structured safety report showing unsupported quotes, invalid citations, placeholders, and documentation concerns;
+- a `.docx` download for newly generated and historical appeals when running with the FastAPI backend.
+
+## Current Highlights
+
+- **Clinical note upload**: supports plain text, Markdown, CSV, DOCX, and text-based PDF extraction.
+- **Denial detail parsing**: pasted denial details can populate payer, member, denial, diagnosis, service, and authorization fields.
+- **Streaming generation**: the UI shows stages such as guideline retrieval, PubMed search, generation, safety checks, repair, and save.
+- **Clinical note sufficiency check**: very thin notes are blocked before spending an LLM call.
+- **Guideline retrieval**: exact CPT/HCPCS and ICD-10 matches are preferred before keyword fallback.
+- **Medical safety checks**: deterministic checks catch unresolved placeholders, invalid citations, unsupported quotes, and unsupported numeric claims.
+- **Repair pass**: unsafe drafts can be repaired before being stored.
+- **Payer-safe language**: missing or unclear criteria are no longer presented as a payer-facing "Documentation Gaps" concession. They are reframed as exception rationale when appropriate.
+- **Demo/sample cases**: the home screen includes realistic orthopedic, cardiology, and oncology sample cases.
+- **Model fallback**: Gemini text generation tries multiple low-cost/free models before giving up, and can fall back to Anthropic or OpenRouter when keys are configured.
+
+## How It Works
+
+```text
+Clinical notes + denial details
+        |
+        v
+Field parsing and clinical-note sufficiency check
+        |
+        v
+Guideline retrieval
+  - exact code matches first
+  - keyword fallback if no code match exists
+        |
+        v
+Optional PubMed search
+        |
+        v
+Prompt assembly with separated sources
+  - Source A: patient clinical notes
+  - Source B: guideline / policy sources
+  - Source C: PubMed literature, when available
+  - Payer denial details: administrative and denial-rebuttal context
+        |
+        v
+LLM draft generation
+        |
+        v
+Deterministic safety checks
+        |
+        v
+Repair pass if needed
+        |
+        v
+Saved appeal + citations + DOCX download
+```
+
+The prompt intentionally separates source types. Patient facts should come from clinical notes. Payer criteria and denial assertions should come from denial details and guideline sources. PubMed articles can support general medical reasoning, but they should not be treated as patient-specific chart evidence.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 16 (App Router), FastAPI |
-| Frontend | React 19 |
-| Styling | Tailwind CSS v4 + custom CSS |
-| Backend | Python 3.11+, FastAPI, SQLAlchemy |
-| Primary LLM | Claude 3.5 Haiku (Anthropic) |
-| Fallback LLMs | Gemini 2.0 Flash-Lite, OpenRouter free models |
-| Evidence Search | PubMed NCBI E-utilities API |
-| Medical Codes | In-memory ICD-10 + CPT lookup (~130 codes) |
-| Storage | PostgreSQL for FastAPI backend; local JSON fallback for standalone Next.js prototype |
+| Area | Technology |
+| --- | --- |
+| Frontend | Next.js 16, React 19, Tailwind CSS v4, lucide-react |
+| Backend | FastAPI, SQLAlchemy async, PostgreSQL |
+| LLM providers | Gemini, Anthropic, OpenRouter |
+| Document parsing | Built-in text/DOCX/text-PDF extraction |
+| Word export | `python-docx` |
+| Evidence search | PubMed NCBI E-utilities API |
+| Testing | ESLint, TypeScript, pytest |
 
 ## Setup
 
 ### Prerequisites
-- Node.js 18+
-- An Anthropic API key (recommended) or Google Gemini API key (free)
 
-### Installation
+Install:
+
+- Node.js 18 or newer;
+- Python 3.11 or newer;
+- Docker, if you want PostgreSQL through `docker compose`;
+- `uv` for the backend Python environment.
+
+Install `uv` if needed:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 1. Clone And Install
 
 ```bash
 git clone https://github.com/messiahmajid/appealai.git
@@ -62,24 +116,85 @@ cd appealai
 npm install
 ```
 
-### Environment Variables
+### 2. Configure API Keys
 
-Create a `.env.local` file in the project root:
+The app needs at least one text-generation API key.
 
-```env
-# Primary (recommended) — ~$0.03 per appeal
-ANTHROPIC_API_KEY=sk-ant-...
+For the FastAPI backend, copy the backend environment file:
 
-# Free fallback — get a key at https://aistudio.google.com
-GOOGLE_GENERATIVE_AI_API_KEY=your-gemini-key
-
-# Free fallback — get a key at https://openrouter.ai
-OPENROUTER_API_KEY=your-openrouter-key
+```bash
+cp backend/.env.example backend/.env
 ```
 
-You need **at least one** API key. The app will use whichever is available in priority order: Anthropic > Gemini > OpenRouter.
+Then edit `backend/.env`:
 
-### Run the Standalone Next.js Prototype
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/appealai
+
+# Free Gemini key from https://aistudio.google.com/apikey
+GOOGLE_GENERATIVE_AI_API_KEY=
+
+# Optional Gemini model order. The app tries these in order.
+GEMINI_TEXT_MODELS=gemini-2.0-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash
+
+# Optional fallbacks
+ANTHROPIC_API_KEY=
+OPENROUTER_API_KEY=
+
+LOG_LEVEL=INFO
+```
+
+For the Next.js frontend, create `.env.local` in the project root:
+
+```env
+APPEALAI_USE_FASTAPI=true
+APPEALAI_BACKEND_URL=http://localhost:8000
+
+# Only needed if running the standalone Next.js prototype without FastAPI.
+GOOGLE_GENERATIVE_AI_API_KEY=
+ANTHROPIC_API_KEY=
+OPENROUTER_API_KEY=
+GEMINI_TEXT_MODELS=gemini-2.0-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash
+```
+
+Recommended local development uses FastAPI, so the frontend proxies API calls to `http://localhost:8000`.
+
+### 3. Start PostgreSQL
+
+```bash
+docker compose up -d postgres
+```
+
+### 4. Install Backend Dependencies And Run Migrations
+
+```bash
+cd backend
+uv sync --extra dev
+uv run alembic upgrade head
+cd ..
+```
+
+You can also use the npm script:
+
+```bash
+npm run backend:migrate
+```
+
+### 5. Start The Backend
+
+```bash
+npm run backend:dev
+```
+
+The backend runs at [http://localhost:8000](http://localhost:8000). Health check:
+
+```bash
+curl http://localhost:8000/health
+```
+
+### 6. Start The Frontend
+
+In another terminal:
 
 ```bash
 npm run dev
@@ -87,128 +202,182 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-### Run the FastAPI + PostgreSQL Backend
+## Running With Docker
+
+PostgreSQL is available through Docker Compose. The compose file also contains a backend service:
 
 ```bash
-docker compose up -d postgres
 cp backend/.env.example backend/.env
-npm run backend:migrate
-npm run backend:dev
+docker compose up --build
 ```
 
-In a second terminal:
+Then run the frontend separately:
 
 ```bash
 APPEALAI_USE_FASTAPI=true APPEALAI_BACKEND_URL=http://localhost:8000 npm run dev
 ```
 
-The frontend still calls `/api/*`; with `APPEALAI_USE_FASTAPI=true`, those routes forward to the FastAPI backend.
+## Common Workflows
 
-### Test and Evaluate
+### Try A Demo Case
+
+1. Open the home page.
+2. Choose one of the sample cases.
+3. Review the preloaded notes and denial details.
+4. Generate the appeal.
+5. Download the `.docx` file or open the saved appeal from history.
+
+### Upload Clinical Notes
+
+Supported uploads:
+
+- `.txt`
+- `.md`
+- `.csv`
+- `.docx`
+- text-based `.pdf`
+
+Scanned image PDFs are not OCR-supported yet. If a PDF is only an image, paste the note text into the clinical notes field.
+
+### Paste Denial Details
+
+Use the denial details box for payer language such as:
+
+- payer name;
+- plan type;
+- member ID;
+- denial date;
+- authorization or case number;
+- denied drug, service, CPT, HCPCS, NDC, or ICD-10 code;
+- reason for denial;
+- plan criteria;
+- appeal deadline.
+
+The parser tries to extract structured fields from either denial details or clinical notes. Denial details are preferred for administrative fields. Clinical notes remain the source of patient-specific medical facts.
+
+### Download DOCX
+
+DOCX download requires the FastAPI backend because Word export is handled by Python. Newly generated and historical saved appeals can be downloaded from the appeal detail page when `APPEALAI_USE_FASTAPI=true`.
+
+## Rate Limits And Free APIs
+
+Gemini and OpenRouter can be used free, but free tiers can rate-limit aggressively.
+
+Important details:
+
+- Gemini rate limits may be per minute, per token minute, or per day.
+- Gemini limits are applied per Google project, not just per API key.
+- Waiting one minute is not always enough if the daily quota or token quota is exhausted.
+- AppealAI tries several Gemini models in order before failing.
+- Adding `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY` gives the app another fallback path.
+
+For the most reliable demos, configure more than one provider.
+
+## Testing
+
+Run the frontend checks:
 
 ```bash
+npx tsc --noEmit
 npm run lint
-npm run build
+```
+
+Run backend tests:
+
+```bash
 npm run backend:test
+```
+
+Run a small evaluation sample:
+
+```bash
 npm run eval -- --limit 5
 ```
 
-Omit `--limit 5` to run all 55 evaluation scenarios against a live backend.
+Run the full evaluation suite:
 
-### Try a Sample Case
-
-From the dashboard, click one of the three sample cases (Orthopedics, Cardiology, or Oncology) to see a pre-populated clinical scenario. Click "Generate Appeal Letter" to see the full pipeline in action.
-
-## How It Works
-
+```bash
+npm run eval
 ```
-User Input (clinical notes + denial details)
-       |
-       v
-+------------------------------------------+
-|  RAG Retrieval                           |
-|  Exact CPT/ICD-10 matches first          |
-|  Keyword fallback only when no code hit  |
-|  Cap at 3 relevant guidelines            |
-+-------------------+----------------------+
-                    |
-       +------------+------------+
-       v                         v
-+--------------+    +---------------------+
-|  PubMed      |    |  Prompt Assembly    |
-|  Evidence    |--->|  Source A: Notes     |
-|  Search      |    |  Source B: Guidelines|
-|  (NCBI API)  |    |  Source C: PubMed   |
-+--------------+    +----------+----------+
-                               |
-                               v
-                    +---------------------+
-                    |  LLM Generation     |
-                    |  Claude Haiku       |
-                    |  (temp=0.15)        |
-                    +----------+----------+
-                               |
-                               v
-                    +---------------------+
-                    |  Appeal Letter +    |
-                    |  Citations +        |
-                    |  PubMed References  |
-                    +---------------------+
-                               |
-                    (optional)  v
-                    +---------------------+
-                    |  Accuracy           |
-                    |  Verification       |
-                    +---------------------+
-```
-
-## Cost
-
-| Action | Cost |
-|--------|------|
-| Generate appeal (Claude Haiku) | ~$0.03 |
-| Verify accuracy (optional) | ~$0.02 |
-| PubMed search | Free |
-| RAG retrieval | Free (keyword-based) |
-| With Gemini/OpenRouter fallback | Free |
-
-**~33 appeals per dollar** with Claude Haiku. Free with Gemini or OpenRouter (lower quality).
 
 ## Project Structure
 
-```
+```text
 src/
-├── app/                        # Pages + API routes
-│   ├── page.tsx                # Dashboard
-│   ├── new-appeal/page.tsx     # 3-step appeal creation wizard
-│   ├── appeals/                # Appeal history + detail views
-│   └── api/
-│       ├── generate-appeal/    # Main generation pipeline
-│       ├── verify-appeal/      # On-demand accuracy check
-│       ├── appeals/            # Appeal CRUD
-│       └── codes/              # CPT/ICD-10 autocomplete
-├── components/
-│   └── Sidebar.tsx             # Navigation
-└── lib/
-    ├── gemini.ts               # Multi-model LLM abstraction
-    ├── prompts.ts              # Prompt templates + anti-hallucination rules
-    ├── guidelines.ts           # 11 medical guidelines with evidence
-    ├── retrieval.ts            # Guideline source selection
-    ├── rag.ts                  # Embedding + keyword fallback retrieval
-    ├── web-evidence.ts         # PubMed search integration
-    ├── db.ts                   # File-based persistence
-    ├── medical-codes.ts        # ICD-10 + CPT lookup
-    └── sample-data.ts          # 3 test cases
+  app/
+    page.tsx                    Home page and sample-case entry
+    new-appeal/page.tsx          Appeal creation wizard
+    appeals/                     Appeal history and detail pages
+    api/                         Next.js API routes and FastAPI proxy routes
+  lib/
+    detail-parser.ts             Denial and clinical text field extraction
+    gemini.ts                    Next.js-side LLM helper and model fallback
+    guidelines.ts                Local guideline corpus
+    medical-analysis.ts          Sufficiency and structured criteria analysis
+    medical-safety.ts            Deterministic safety checks and sanitizer
+    prompts.ts                   Generation, repair, and verification prompts
+    rag.ts                       Embedding cache and fallback retrieval
+    web-evidence.ts              PubMed search integration
+
 backend/
-├── app/
-│   ├── main.py                 # FastAPI app, middleware, routers
-│   ├── routers/                # Appeal, code search, verification endpoints
-│   ├── services/               # LLM, RAG, retrieval, PubMed, guideline logic
-│   └── db/                     # SQLAlchemy async session + tables
-├── alembic/                    # PostgreSQL migrations
-├── eval/                       # 55-case evaluation harness
-└── tests/                      # API, retrieval, service tests
+  app/
+    main.py                      FastAPI app
+    routers/
+      appeals.py                 Generate, stream, list, detail, DOCX download
+      codes.py                   CPT/ICD-10 search
+      documents.py               Clinical-note extraction endpoint
+      verification.py            On-demand verification
+    services/
+      appeal_generator.py        End-to-end appeal pipeline
+      document_parser.py         TXT/DOCX/PDF extraction
+      docx_export.py             Word export
+      guidelines.py              Backend guideline corpus
+      llm.py                     Provider fallback and response cache
+      medical_analysis.py        Sufficiency and criteria matching
+      medical_safety.py          Safety checks and repair sanitizer
+      prompts.py                 Backend prompt templates
+      rag.py                     Embedding cache and keyword fallback
+      web_evidence.py            PubMed integration
+  alembic/                       Database migrations
+  eval/                          Evaluation scenarios
+  tests/                         Backend tests
 ```
+
+## Safety And Review Notes
+
+AppealAI is designed to reduce drafting time, not remove professional review. Before submission, a clinician or authorized staff member should confirm:
+
+- patient identifiers are correct;
+- diagnosis and procedure/drug codes are correct;
+- quoted clinical facts match the chart;
+- the payer address and submission method are correct;
+- the requested service matches the actual order or prescription;
+- the final letter does not include unsupported statements.
+
+## Troubleshooting
+
+### "Unable to extract text from file"
+
+The file may be scanned, encrypted, image-only, or in an unsupported format. Try copying the note text into the clinical notes field. For PDFs, text-based PDFs work better than scanned PDFs.
+
+### "Gemini API is rate-limited"
+
+This can be a per-minute, per-token-minute, or daily quota issue. Wait for quota reset, reduce repeated generations, or add another provider key.
+
+### DOCX download returns 501
+
+The frontend is not using the FastAPI backend. Set:
+
+```env
+APPEALAI_USE_FASTAPI=true
+APPEALAI_BACKEND_URL=http://localhost:8000
+```
+
+Then run both backend and frontend.
+
+### Generated letter is marked "Needs Review"
+
+Needs Review means the deterministic safety checker found something worth inspecting. It does not always mean the appeal is clinically wrong. Common causes include a quote that does not exactly match the source, a number not found in the notes/guidelines, or a criterion that needs an exception rationale.
 
 ## License
 

@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from app.config import settings
 from app.logging_config import setup_logging
-from app.routers import appeals, codes, verification
+from app.routers import appeals, codes, documents, verification
 
 setup_logging(settings.log_level)
 logger = structlog.get_logger()
@@ -17,9 +17,10 @@ logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
     logger.info("app_startup")
     from app.services.rag import initialize_rag
-    await initialize_rag()
+    asyncio.create_task(initialize_rag())
     yield
     logger.info("app_shutdown")
 
@@ -54,6 +55,7 @@ async def validation_error_handler(request: Request, exc: ValidationError):
 
 app.include_router(appeals.router)
 app.include_router(codes.router)
+app.include_router(documents.router)
 app.include_router(verification.router)
 
 

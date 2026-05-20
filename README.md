@@ -422,6 +422,3 @@ Then run both backend and frontend.
 
 Needs Review means the deterministic safety checker found something worth inspecting. It does not always mean the appeal is clinically wrong. Common causes include a quote that does not exactly match the source, a number not found in the notes/guidelines, or a criterion that needs an exception rationale.
 
-## License
-
-MIT

@@ -1,5 +1,7 @@
 # AppealAI
 
+## Overview
+
 AppealAI helps clinicians and care teams draft insurance prior authorization appeal letters from clinical notes and denial details.
 
 The app is built to do three things well:
@@ -9,6 +11,18 @@ The app is built to do three things well:
 - make the generation process transparent with progress steps, safety checks, and downloadable Word output.
 
 AppealAI is drafting support software. It is not a medical decision-maker, legal advice, or a substitute for clinician review before submission.
+
+## Problem
+
+Prior authorization denials often require a clinician or staff member to write a detailed appeal that connects the patient's chart to the payer's medical-necessity criteria. That usually means reading the denial, finding the right policy language, extracting chart evidence, quoting labs or imaging correctly, and writing a rebuttal that is specific enough for medical review.
+
+This is slow, repetitive, and easy to get wrong. A weak appeal may miss the exact denied criterion, cite the wrong policy, overstate the chart, or fail to explain why a formulary or step-therapy exception is medically appropriate.
+
+## Why It Matters
+
+Appeals can affect whether a patient receives a medication, imaging study, procedure, device, or specialist intervention on time. Delays add administrative burden for clinicians and can delay care for patients.
+
+AppealAI focuses on the parts of the workflow where software can help: organizing the record, mapping evidence to criteria, checking for unsupported claims, and producing a complete draft that a clinician can review instead of starting from a blank page.
 
 ## What It Does
 
@@ -28,7 +42,7 @@ It produces:
 - a structured safety report showing unsupported quotes, invalid citations, placeholders, and documentation concerns;
 - a `.docx` download for newly generated and historical appeals when running with the FastAPI backend.
 
-## Current Highlights
+## Key Features
 
 - **Clinical note upload**: supports plain text, Markdown, CSV, DOCX, and text-based PDF extraction.
 - **Denial detail parsing**: pasted denial details can populate payer, member, denial, diagnosis, service, and authorization fields.
@@ -41,7 +55,7 @@ It produces:
 - **Demo/sample cases**: the home screen includes realistic orthopedic, cardiology, and oncology sample cases.
 - **Model fallback**: Gemini text generation tries multiple low-cost/free models before giving up, and can fall back to Anthropic or OpenRouter when keys are configured.
 
-## How It Works
+## Architecture
 
 ```text
 Clinical notes + denial details
@@ -85,11 +99,49 @@ The prompt intentionally separates source types. Patient facts should come from 
 | --- | --- |
 | Frontend | Next.js 16, React 19, Tailwind CSS v4, lucide-react |
 | Backend | FastAPI, SQLAlchemy async, PostgreSQL |
+| Database | PostgreSQL for the FastAPI backend; local JSON fallback for prototype use |
 | LLM providers | Gemini, Anthropic, OpenRouter |
 | Document parsing | Built-in text/DOCX/text-PDF extraction |
 | Word export | `python-docx` |
 | Evidence search | PubMed NCBI E-utilities API |
 | Testing | ESLint, TypeScript, pytest |
+| Deployment | Docker Compose for PostgreSQL/backend; Next.js frontend |
+
+## Technical Challenges
+
+- **Grounding medical claims**: The letter must be persuasive without inventing facts. The app separates clinical notes, payer denial details, guidelines, and PubMed literature so the model does not treat one source as another.
+- **Avoiding false safety warnings**: Medical text often differs by punctuation, hyphenation, section headings, or units such as `kg/m²` vs `kg/m2`. The safety checker normalizes harmless formatting differences while still flagging unsupported facts.
+- **Handling incomplete documentation**: Some cases have real gaps, such as missing step-therapy trials. The app now avoids payer-facing "Documentation Gaps" sections and instead frames appropriate cases as exception rationale.
+- **Parsing real-world uploads**: Users do not only upload `.txt` files. DOCX and text-based PDF extraction were added so common clinical note formats work without manual conversion.
+- **Rate limits on free models**: Free Gemini/OpenRouter usage can hit per-minute, token, or daily quotas. The app now tries multiple Gemini models and supports provider fallback.
+- **Keeping generation transparent**: Streaming progress turns a black-box wait into visible stages: retrieving policies, checking sufficiency, searching PubMed, generating, running safety checks, repairing, and saving.
+
+## Results / Metrics
+
+- Clinical note upload supports 5 common formats: `.txt`, `.md`, `.csv`, `.docx`, and text-based `.pdf`.
+- Backend test suite currently has 51 passing tests.
+- Evaluation coverage includes 50+ medical denial scenarios.
+- Guideline retrieval covers common denial areas including cardiology, diabetes medications, oncology, orthopedics, spine procedures, home oxygen, and power mobility.
+- Deterministic safety checks cover placeholders, invalid citations, unsupported quotes, and unsupported numeric claims.
+- Demo flow includes 3 preloaded sample cases: orthopedics, cardiology, and oncology.
+
+## What I Learned
+
+- Medical AI products need source boundaries. The most important prompt rule is not "write better"; it is "know which source each fact is allowed to come from."
+- A safety checker can be too strict. Exact quote matching sounds safe, but in practice it creates false alarms unless it tolerates punctuation, pluralization, units, and heading-style text.
+- Payer-facing language matters. Calling something a "documentation gap" may be accurate internally, but it can weaken the appeal if shown directly to the payer.
+- Free model APIs are useful for demos, but production-quality workflows need fallback providers, clear errors, caching, and rate-limit-aware behavior.
+- Upload and export details matter. DOCX/PDF input and DOCX output are not extras for this domain; they match how clinical offices actually work.
+
+## Next Steps
+
+- Add OCR for scanned PDFs and image-only faxes.
+- Expand the guideline/policy corpus with more payer-specific pharmacy, imaging, DME, and surgical policies.
+- Add user-editable policy source management so teams can upload payer policies.
+- Add stronger structured extraction for payer criteria, deadlines, NDC codes, and step-therapy rules.
+- Add role-based accounts and organization-level appeal history.
+- Add deployment documentation for a production environment.
+- Add more evaluation cases with expected letter-quality rubrics, not just retrieval checks.
 
 ## Setup
 

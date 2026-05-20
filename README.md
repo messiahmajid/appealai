@@ -133,15 +133,6 @@ The prompt intentionally separates source types. Patient facts should come from 
 - Free model APIs are useful for demos, but production-quality workflows need fallback providers, clear errors, caching, and rate-limit-aware behavior.
 - Upload and export details matter. DOCX/PDF input and DOCX output are not extras for this domain; they match how clinical offices actually work.
 
-## Next Steps
-
-- Add OCR for scanned PDFs and image-only faxes.
-- Expand the guideline/policy corpus with more payer-specific pharmacy, imaging, DME, and surgical policies.
-- Add user-editable policy source management so teams can upload payer policies.
-- Add stronger structured extraction for payer criteria, deadlines, NDC codes, and step-therapy rules.
-- Add role-based accounts and organization-level appeal history.
-- Add deployment documentation for a production environment.
-- Add more evaluation cases with expected letter-quality rubrics, not just retrieval checks.
 
 ## Setup
 

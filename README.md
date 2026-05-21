@@ -145,6 +145,15 @@ The prompt intentionally separates source types. Patient facts should come from 
 
 ## Setup
 
+The recommended local setup runs the full product:
+
+- Next.js frontend at [http://localhost:3000](http://localhost:3000)
+- FastAPI backend at [http://localhost:8000](http://localhost:8000)
+- PostgreSQL through Docker
+- DOCX upload/download support through the backend
+
+After installation, you will use two terminal windows: one for the backend and one for the frontend.
+
 ### Prerequisites
 
 Install:
@@ -168,9 +177,13 @@ cd appealai
 npm install
 ```
 
+`npm install` installs the frontend/root JavaScript dependencies. Backend Python dependencies are installed later with `uv sync --extra dev`.
+
 ### 2. Configure API Keys
 
 The app needs at least one text-generation API key.
+
+For the easiest free setup, use a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). For more reliable demos, also add either an OpenRouter or Anthropic key so the app has a fallback if Gemini rate-limits.
 
 For the FastAPI backend, copy the backend environment file:
 
@@ -198,6 +211,21 @@ LOG_LEVEL=INFO
 
 For the Next.js frontend, create `.env.local` in the project root:
 
+```bash
+cat > .env.local <<'EOF'
+APPEALAI_USE_FASTAPI=true
+APPEALAI_BACKEND_URL=http://localhost:8000
+
+# Only needed if running the standalone Next.js prototype without FastAPI.
+GOOGLE_GENERATIVE_AI_API_KEY=
+ANTHROPIC_API_KEY=
+OPENROUTER_API_KEY=
+GEMINI_TEXT_MODELS=gemini-2.0-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash
+EOF
+```
+
+The resulting file should look like this:
+
 ```env
 APPEALAI_USE_FASTAPI=true
 APPEALAI_BACKEND_URL=http://localhost:8000
@@ -217,6 +245,8 @@ Recommended local development uses FastAPI, so the frontend proxies API calls to
 docker compose up -d postgres
 ```
 
+PostgreSQL will be available at `localhost:5432` with the credentials from `backend/.env.example`.
+
 ### 4. Install Backend Dependencies And Run Migrations
 
 ```bash
@@ -232,7 +262,11 @@ You can also use the npm script:
 npm run backend:migrate
 ```
 
+This creates or updates the database tables used for saved appeals and appeal history.
+
 ### 5. Start The Backend
+
+In terminal 1:
 
 ```bash
 npm run backend:dev
@@ -244,15 +278,31 @@ The backend runs at [http://localhost:8000](http://localhost:8000). Health check
 curl http://localhost:8000/health
 ```
 
+Expected response:
+
+```json
+{"status":"ok"}
+```
+
 ### 6. Start The Frontend
 
-In another terminal:
+In terminal 2:
 
 ```bash
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### 7. Confirm The App Works
+
+1. Open the home page.
+2. Click one of the sample cases.
+3. Generate an appeal.
+4. Confirm the progress steps appear.
+5. Open the saved appeal and download the `.docx` file.
+
+If generation fails with a Gemini rate-limit message, the app is running but the configured Google project is out of available quota. Wait for quota reset or add `OPENROUTER_API_KEY` / `ANTHROPIC_API_KEY` to `backend/.env`.
 
 ## Running With Docker
 
@@ -268,6 +318,8 @@ Then run the frontend separately:
 ```bash
 APPEALAI_USE_FASTAPI=true APPEALAI_BACKEND_URL=http://localhost:8000 npm run dev
 ```
+
+Docker mode still needs valid API keys in `backend/.env`. The frontend is run separately so you can keep Next.js hot reload during development.
 
 ## Common Workflows
 

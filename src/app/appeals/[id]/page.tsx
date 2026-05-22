@@ -208,9 +208,9 @@ export default function AppealDetailPage() {
                         </div>
                         <div className="result-layout">
                             {appeal.safetyReport && (
-                                <div style={{ gridColumn: '1 / -1', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8, background: appeal.safetyReport.verdict === 'PASS' ? 'rgba(45,142,71,0.06)' : appeal.safetyReport.verdict === 'NEEDS_REVIEW' ? 'rgba(184,134,11,0.06)' : 'rgba(197,48,48,0.06)' }}>
+                                <div style={{ gridColumn: '1 / -1', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8, background: appeal.safetyReport.verdict === 'PASS' ? 'var(--evidence-green-soft)' : appeal.safetyReport.verdict === 'NEEDS_REVIEW' ? 'var(--evidence-amber-soft)' : 'var(--evidence-red-soft)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 8 }}>
-                                        <div style={{ fontSize: 13, fontWeight: 700, color: appeal.safetyReport.verdict === 'PASS' ? '#2d8e47' : appeal.safetyReport.verdict === 'NEEDS_REVIEW' ? '#a67c00' : '#c53030' }}>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: appeal.safetyReport.verdict === 'PASS' ? 'var(--evidence-green)' : appeal.safetyReport.verdict === 'NEEDS_REVIEW' ? 'var(--evidence-amber)' : 'var(--evidence-red)' }}>
                                             Safety: {appeal.safetyReport.verdict === 'PASS' ? 'Pass' : appeal.safetyReport.verdict === 'NEEDS_REVIEW' ? 'Needs Review' : 'Failed'}
                                             {appeal.safetyReport.repairAttempted ? ' after repair attempt' : ''}
                                         </div>
@@ -258,7 +258,9 @@ export default function AppealDetailPage() {
                                             {appeal.safetyReport.structuredAnalysis.policyMetadata.map((p, i) => (
                                                 <div key={i} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
                                                     <div style={{ fontWeight: 600 }}>{p.title}</div>
-                                                    <div style={{ color: 'var(--text-muted)' }}>{p.source} · Effective {p.effectiveDate} · {p.freshnessStatus.replace('_', ' ')}</div>
+                                                    <div style={{ color: 'var(--text-muted)' }}>
+                                                        {p.source} · Effective {p.effectiveDate} · <span style={{ fontWeight: 700, color: p.freshnessStatus === 'current' ? 'var(--evidence-green)' : p.freshnessStatus === 'review_due' ? 'var(--evidence-amber)' : 'var(--evidence-red)' }}>{p.freshnessStatus.replace('_', ' ')}</span>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>

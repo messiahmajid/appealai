@@ -627,7 +627,7 @@ function NewAppealContent() {
                             />
                             {fileName ? (
                                 <>
-                                    <FileText size={36} color="#2d8e47" className="file-upload-icon" />
+                                    <FileText size={36} color="var(--evidence-green)" className="file-upload-icon" />
                                     <div className="file-upload-text">
                                         <strong>{fileName}</strong> uploaded
                                     </div>
@@ -643,7 +643,7 @@ function NewAppealContent() {
                                 </>
                             )}
                         </div>
-                        <div style={{ fontSize: 12, color: fileError ? '#c53030' : 'var(--text-muted)', marginTop: 8 }}>
+                        <div style={{ fontSize: 12, color: fileError ? 'var(--evidence-red)' : 'var(--text-muted)', marginTop: 8 }}>
                             {fileError || 'Supported uploads: TXT, MD, CSV, DOCX, and text-based PDF. Scanned PDFs need OCR first.'}
                         </div>
 
@@ -659,7 +659,7 @@ function NewAppealContent() {
                                     setClinicalNotes(e.target.value);
                                     setClinicalSufficiencyReport(null);
                                 }}
-                                style={{ minHeight: 300, fontFamily: "'SF Mono', Menlo, monospace", fontSize: 13, lineHeight: 1.7 }}
+                                style={{ minHeight: 300, fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.7 }}
                             />
                             <div className="form-helper">
                                 {clinicalNotes.length > 0 ? `${clinicalNotes.length.toLocaleString()} characters` : 'Minimum 50 characters required'}
@@ -691,16 +691,16 @@ function NewAppealContent() {
 
                         {clinicalSufficiencyReport && (
                             <div style={{
-                                border: '1px solid #f0b429',
-                                background: 'rgba(240, 180, 41, 0.08)',
+                                border: '1px solid var(--evidence-amber)',
+                                background: 'var(--evidence-amber-soft)',
                                 borderRadius: 8,
                                 padding: 14,
                                 marginBottom: 20,
                             }}>
                                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                                    <AlertCircle size={18} color="#a67c00" style={{ marginTop: 1, flexShrink: 0 }} />
+                                    <AlertCircle size={18} color="var(--evidence-amber)" style={{ marginTop: 1, flexShrink: 0 }} />
                                     <div>
-                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#8a6500', marginBottom: 4 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--evidence-amber)', marginBottom: 4 }}>
                                             Clinical notes need more support before generation
                                         </div>
                                         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
@@ -897,7 +897,7 @@ function NewAppealContent() {
                                     Analyzing clinical notes, retrieving medical guidelines, and drafting your appeal.
                                     <br />This may take 15-30 seconds.
                                 </div>
-                                <div style={{ width: '100%', maxWidth: 520, margin: '24px auto 0', textAlign: 'left' }}>
+                                <div className="generation-track">
                                     {generationStages.map(stageItem => (
                                         <div
                                             key={stageItem.id}
@@ -917,8 +917,8 @@ function NewAppealContent() {
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
-                                                border: `1px solid ${stageItem.status === 'done' ? '#2d8e47' : stageItem.status === 'error' ? '#c53030' : 'var(--border)'}`,
-                                                color: stageItem.status === 'done' ? '#2d8e47' : stageItem.status === 'error' ? '#c53030' : 'var(--text-muted)',
+                                                border: `1px solid ${stageItem.status === 'done' ? 'var(--color-success)' : stageItem.status === 'error' ? 'var(--color-danger)' : 'var(--border)'}`,
+                                                color: stageItem.status === 'done' ? 'var(--color-success)' : stageItem.status === 'error' ? 'var(--color-danger)' : 'var(--text-muted)',
                                                 fontSize: 11,
                                             }}>
                                                 {stageItem.status === 'done' ? <Check size={13} /> : stageItem.status === 'error' ? '!' : stageItem.status === 'active' ? '...' : ''}
@@ -939,7 +939,7 @@ function NewAppealContent() {
                             </div>
                         ) : error ? (
                             <div className="card" style={{ maxWidth: 600, textAlign: 'center', padding: 48 }}>
-                                <AlertCircle size={48} color="#c53030" style={{ marginBottom: 16 }} />
+                                <AlertCircle size={48} color="var(--color-danger)" style={{ marginBottom: 16 }} />
                                 <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Generation Failed</h2>
                                 <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>{error}</p>
                                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
@@ -980,9 +980,9 @@ function NewAppealContent() {
 
                                 <div className="result-layout">
                                     {safetyReport && (
-                                        <div style={{ gridColumn: '1 / -1', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8, background: safetyReport.verdict === 'PASS' ? 'rgba(45,142,71,0.06)' : safetyReport.verdict === 'NEEDS_REVIEW' ? 'rgba(184,134,11,0.06)' : 'rgba(197,48,48,0.06)' }}>
+                                        <div style={{ gridColumn: '1 / -1', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 8, background: safetyReport.verdict === 'PASS' ? 'var(--evidence-green-soft)' : safetyReport.verdict === 'NEEDS_REVIEW' ? 'var(--evidence-amber-soft)' : 'var(--evidence-red-soft)' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: safetyReport.issues.length ? 8 : 0 }}>
-                                                <div style={{ fontSize: 13, fontWeight: 700, color: safetyReport.verdict === 'PASS' ? '#2d8e47' : safetyReport.verdict === 'NEEDS_REVIEW' ? '#a67c00' : '#c53030' }}>
+                                                <div style={{ fontSize: 13, fontWeight: 700, color: safetyReport.verdict === 'PASS' ? 'var(--evidence-green)' : safetyReport.verdict === 'NEEDS_REVIEW' ? 'var(--evidence-amber)' : 'var(--evidence-red)' }}>
                                                     Safety: {safetyReport.verdict === 'PASS' ? 'Pass' : safetyReport.verdict === 'NEEDS_REVIEW' ? 'Needs Review' : 'Failed'}
                                                     {safetyReport.repairAttempted ? ' after repair attempt' : ''}
                                                 </div>
@@ -1040,10 +1040,10 @@ function NewAppealContent() {
                                                 {webEvidence.map((e, i) => (
                                                     <div key={i} className="citation-item">
                                                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                                                            <span className="citation-index" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>P{i + 1}</span>
+                                                            <span className="citation-index">P{i + 1}</span>
                                                             <div>
                                                                 <div className="citation-title">{e.title}</div>
-                                                                <div style={{ fontSize: 11, fontWeight: 700, color: generatedLetter.includes(`[PubMed ${i + 1}]`) ? '#2d8e47' : 'var(--text-muted)', marginTop: 2 }}>
+                                                                <div style={{ fontSize: 11, fontWeight: 700, color: generatedLetter.includes(`[PubMed ${i + 1}]`) ? 'var(--evidence-green)' : 'var(--text-muted)', marginTop: 2 }}>
                                                                     {generatedLetter.includes(`[PubMed ${i + 1}]`) ? 'Cited in letter' : 'Retrieved only'}
                                                                 </div>
                                                                 <div className="citation-source">{e.citation}</div>
@@ -1051,7 +1051,7 @@ function NewAppealContent() {
                                                                     href={e.url}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
-                                                                    style={{ fontSize: 11, color: '#3b82f6', textDecoration: 'none' }}
+                                                                    style={{ fontSize: 11, color: 'var(--evidence-blue)', textDecoration: 'none' }}
                                                                 >
                                                                     View on PubMed
                                                                 </a>
@@ -1072,7 +1072,7 @@ function NewAppealContent() {
                                                         <span style={{ color: 'var(--text-secondary)', maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                             {s.title.split('—')[1]?.trim() || s.title}
                                                         </span>
-                                                        <span style={{ fontWeight: 700, color: s.relevanceScore > 0.7 ? '#2d8e47' : s.relevanceScore > 0.4 ? '#b8860b' : 'var(--text-muted)' }}>
+                                                        <span style={{ fontWeight: 700, color: s.relevanceScore > 0.7 ? 'var(--evidence-green)' : s.relevanceScore > 0.4 ? 'var(--evidence-amber)' : 'var(--text-muted)' }}>
                                                             {(s.relevanceScore * 100).toFixed(0)}%
                                                         </span>
                                                     </div>
@@ -1088,7 +1088,9 @@ function NewAppealContent() {
                                                 {safetyReport.structuredAnalysis.policyMetadata.map((p, i) => (
                                                     <div key={i} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
                                                         <div style={{ fontWeight: 600 }}>{p.title}</div>
-                                                        <div style={{ color: 'var(--text-muted)' }}>{p.source} · Effective {p.effectiveDate} · {p.freshnessStatus.replace('_', ' ')}</div>
+                                                        <div style={{ color: 'var(--text-muted)' }}>
+                                                            {p.source} · Effective {p.effectiveDate} · <span style={{ fontWeight: 700, color: p.freshnessStatus === 'current' ? 'var(--evidence-green)' : p.freshnessStatus === 'review_due' ? 'var(--evidence-amber)' : 'var(--evidence-red)' }}>{p.freshnessStatus.replace('_', ' ')}</span>
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -1104,15 +1106,13 @@ function NewAppealContent() {
                                             <div style={{
                                                 display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
                                                 padding: '8px 12px', borderRadius: 6,
-                                                background: verification.overallVerdict === 'PASS' ? 'rgba(45,142,71,0.08)'
-                                                    : verification.overallVerdict === 'NEEDS_REVIEW' ? 'rgba(184,134,11,0.08)'
-                                                        : 'rgba(197,48,48,0.08)',
+                                                background: verification.overallVerdict === 'PASS' ? 'var(--evidence-green-soft)' : verification.overallVerdict === 'NEEDS_REVIEW' ? 'var(--evidence-amber-soft)' : 'var(--evidence-red-soft)',
                                             }}>
                                                 <span style={{
                                                     fontSize: 13, fontWeight: 600,
-                                                    color: verification.overallVerdict === 'PASS' ? '#2d8e47'
-                                                        : verification.overallVerdict === 'NEEDS_REVIEW' ? '#a67c00'
-                                                            : '#c53030',
+                                                    color: verification.overallVerdict === 'PASS' ? 'var(--evidence-green)'
+                                                        : verification.overallVerdict === 'NEEDS_REVIEW' ? 'var(--evidence-amber)'
+                                                            : 'var(--evidence-red)',
                                                 }}>
                                                     {verification.overallVerdict === 'PASS' ? '✓ Verified'
                                                         : verification.overallVerdict === 'NEEDS_REVIEW' ? '⚠ Needs Review'
@@ -1130,12 +1130,10 @@ function NewAppealContent() {
                                                             flexShrink: 0, width: 18, height: 18, borderRadius: '50%',
                                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                             fontSize: 10, marginTop: 1,
-                                                            background: c.status === 'PASS' ? 'rgba(45,142,71,0.1)'
-                                                                : c.status === 'WARNING' ? 'rgba(184,134,11,0.1)'
-                                                                    : 'rgba(197,48,48,0.1)',
-                                                            color: c.status === 'PASS' ? '#2d8e47'
-                                                                : c.status === 'WARNING' ? '#a67c00'
-                                                                    : '#c53030',
+                                                            background: c.status === 'PASS' ? 'var(--evidence-green-soft)' : c.status === 'WARNING' ? 'var(--evidence-amber-soft)' : 'var(--evidence-red-soft)',
+                                                            color: c.status === 'PASS' ? 'var(--evidence-green)'
+                                                                : c.status === 'WARNING' ? 'var(--evidence-amber)'
+                                                                    : 'var(--evidence-red)',
                                                         }}>
                                                             {c.status === 'PASS' ? '✓' : c.status === 'WARNING' ? '!' : '✗'}
                                                         </span>
@@ -1148,8 +1146,8 @@ function NewAppealContent() {
                                             </div>
 
                                             {verification.flaggedIssues?.length > 0 && (
-                                                <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(197,48,48,0.05)', borderRadius: 6 }}>
-                                                    <div style={{ fontSize: 11, fontWeight: 600, color: '#c53030', textTransform: 'uppercase', marginBottom: 6 }}>Flagged Issues</div>
+                                                <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--evidence-red-soft)', borderRadius: 6 }}>
+                                                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--evidence-red)', textTransform: 'uppercase', marginBottom: 6 }}>Flagged Issues</div>
                                                     {verification.flaggedIssues.map((issue, i) => (
                                                         <p key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>• {issue}</p>
                                                     ))}

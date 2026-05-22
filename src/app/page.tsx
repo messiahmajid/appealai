@@ -33,29 +33,58 @@ export default function Dashboard() {
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
-        <div className="hero">
-          <h1 className="hero-title">
-            Prior Authorization<br />Appeal Generator
-          </h1>
-          <p className="hero-subtitle">
-            Upload clinical notes and denial details. Get a medically-cited
-            appeal letter grounded in CMS guidelines and NCCN recommendations.
-          </p>
-          <div className="hero-actions">
-            <Link href="/new-appeal" className="btn btn-primary btn-lg">
-              New Appeal
-            </Link>
-            <Link href="/appeals" className="btn btn-secondary btn-lg">
-              History
-            </Link>
+        <div className="hero dashboard-hero">
+          <div>
+            <div className="hero-kicker">Clinical appeal workbench</div>
+            <h1 className="hero-title">
+              Prior Authorization<br />Appeal Generator
+            </h1>
+            <p className="hero-subtitle">
+              Upload clinical notes and denial details. Generate a medically cited
+              appeal letter with policy retrieval, PubMed context, and safety checks.
+            </p>
+            <div className="hero-actions">
+              <Link href="/new-appeal" className="btn btn-primary btn-lg">
+                New Appeal
+              </Link>
+              <Link href="/appeals" className="btn btn-secondary btn-lg">
+                History
+              </Link>
+            </div>
+          </div>
+          <div className="hero-panel" aria-label="Appeal generation pipeline">
+            <div className="hero-panel-title">Pipeline</div>
+            <div className="pipeline-list">
+              <div className="pipeline-item">
+                <span className="pipeline-step">01</span>
+                <div>
+                  <div className="pipeline-name">Parse the record</div>
+                  <div className="pipeline-copy">Clinical notes, denial details, codes, and provider fields stay separated.</div>
+                </div>
+              </div>
+              <div className="pipeline-item">
+                <span className="pipeline-step">02</span>
+                <div>
+                  <div className="pipeline-name">Retrieve policy evidence</div>
+                  <div className="pipeline-copy">Exact CPT and ICD-10 matches are preferred before fallback search.</div>
+                </div>
+              </div>
+              <div className="pipeline-item">
+                <span className="pipeline-step">03</span>
+                <div>
+                  <div className="pipeline-name">Draft, check, export</div>
+                  <div className="pipeline-copy">The generated letter is screened for placeholders, citations, quotes, and numeric claims.</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Recent Appeals */}
         {recentAppeals.length > 0 && (
-          <div style={{ marginBottom: 48 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400 }}>Recent</h2>
+          <div style={{ marginBottom: 56 }}>
+            <div className="section-head">
+              <h2 className="section-title">Recent appeals</h2>
               <Link href="/appeals" className="btn btn-ghost btn-sm">
                 View all <ArrowRight size={13} />
               </Link>
@@ -85,12 +114,14 @@ export default function Dashboard() {
 
         {/* Sample Cases */}
         <div>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, marginBottom: 4 }}>
-            Try a sample case
-          </h2>
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 0 }}>
-            Load a realistic clinical scenario to see the pipeline in action.
-          </p>
+          <div className="section-head">
+            <div>
+              <h2 className="section-title">Try a sample case</h2>
+              <p className="section-copy">
+                Load a realistic clinical scenario to see the full pipeline before entering your own case.
+              </p>
+            </div>
+          </div>
           <div className="sample-cases-grid">
             {SAMPLE_CASES.map(sc => (
               <div key={sc.id} className="sample-case-card" onClick={() => router.push(`/new-appeal?sample=${sc.id}`)}>

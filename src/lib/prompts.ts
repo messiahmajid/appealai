@@ -206,39 +206,39 @@ ${params.ragContext}
 ${webEvidenceSection}
 ${structuredAnalysisSection}
 == INSTRUCTIONS ==
-Draft a complete appeal letter with this structure:
+Draft a complete appeal letter using the outline below. The "Section 1", "Section 2", etc. labels are INTERNAL STRUCTURE ONLY. Do NOT print "Section 1", "SECTION 1", "Header & Identification", or "Purpose" as standalone headings in the final letter.
 
-**Section 1 — Header & Identification**
+1. Header and identification
 - Proper letterhead (use physician/practice info)
 - Patient identifiers, denied service, claim number
 
-**Section 2 — Purpose**
+2. Purpose
 - State this is an appeal of the denial
 - Quote the core denial reason exactly. If a full denial block was provided, summarize the payer's plan criteria and missing-documentation assertions separately.
 
-**Section 3 — Clinical Summary**
+3. Clinical Summary
 - Summarize the patient's relevant clinical history using ONLY data from SOURCE A
 - Quote findings VERBATIM from the notes (exact wording, exact dates, exact values — no paraphrasing)
 
-**Section 4 — Criterion-by-Criterion Medical Necessity Argument**
+4. Criterion-by-Criterion Medical Necessity Argument
 For EACH approval criterion in the relevant guideline from SOURCE B:
 - State the specific criterion
 - Present the patient's specific evidence that meets it (from SOURCE A, verbatim)
 - Explain WHY this evidence satisfies the criterion (explicit reasoning, not just juxtaposition)
 - Cite the guideline as [1], [2], etc.${pubMedCriterionInstruction}
 
-**Section 5 — Direct Denial Rebuttal**
+5. Direct Denial Rebuttal
 - Address each element of the payer denial details specifically, including plan criteria and missing-documentation assertions when provided
 - Do NOT use circular reasoning — explain WHY the criteria are met, don't just assert they are
 - Connect risk factors (lab values, comorbidities) to clinical urgency with explicit reasoning
 
-**Section 6 — Exception or Additional Supporting Rationale (only if needed)**
+6. Exception or Additional Supporting Rationale (only if needed)
 - Do NOT title any payer-facing section "Documentation Gaps".
 - Do NOT include bracketed "[DOCUMENTATION GAP]" text.
 - If a payer requirement is not directly satisfied but the chart supports an exception, use a persuasive heading such as "Clinical Rationale for Step-Therapy Exception" or "Additional Supporting Rationale".
 - If no exception rationale is needed, omit this section entirely.
 
-**Section 7 — Supporting Documentation & Close**
+7. Supporting Documentation & Close
 - List enclosed documents
 - Professional request for reconsideration
 
@@ -247,7 +247,7 @@ RULES:
 - Quote clinical findings EXACTLY as written in SOURCE A — do not paraphrase or add units not present
 - Every claim must be traceable to ${traceableSources}
 
-Format the letter professionally using markdown.
+Format the letter professionally using markdown. Use payer-facing headings only, such as "Clinical Summary", "Medical Necessity Argument", "Direct Denial Rebuttal", "Clinical Rationale for Step-Therapy Exception", "Supporting Documentation", and "References".
 ${referencesInstruction}`;
 }
 

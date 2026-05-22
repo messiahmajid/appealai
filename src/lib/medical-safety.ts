@@ -125,6 +125,8 @@ function isPlaceholderBracket(content: string): boolean {
 export function sanitizeGeneratedLetter(letter: string): string {
     return letter
         .replace(/\s*\[SOURCE [A-Z]\]/g, '')
+        .replace(/^\s{0,3}(?:#{1,6}\s*)?(?:\*\*)?SECTION\s+\d+\s*[—\-:]\s*(?:HEADER\s*&\s*IDENTIFICATION|PURPOSE)(?:\*\*)?\s*$/gim, '')
+        .replace(/^\s{0,3}(?:#{1,6}\s*)?(?:\*\*)?SECTION\s+\d+\s*[—\-:]\s*/gim, '')
         .replace(/^(\s{0,3}(?:#{1,6}\s*)?(?:\*\*)?)Documentation Gaps(?:\*\*)?\s*$/gim, '$1Clinical Rationale for Exception')
         .replace(/\[DOCUMENTATION GAP[.:]\s*([\s\S]*?)\]/g, 'Additional supporting rationale: $1')
         .replace(/\[DOCUMENTATION GAP\]\s*:\s*/g, 'Additional supporting rationale: ')

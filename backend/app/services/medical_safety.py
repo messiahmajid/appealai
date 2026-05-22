@@ -125,6 +125,18 @@ def _is_placeholder_bracket(content: str) -> bool:
 def sanitize_generated_letter(letter: str) -> str:
     text = re.sub(r"\s*\[SOURCE [A-Z]\]", "", letter)
     text = re.sub(
+        r"^\s{0,3}(?:#{1,6}\s*)?(?:\*\*)?SECTION\s+\d+\s*[—\-:]\s*(?:HEADER\s*&\s*IDENTIFICATION|PURPOSE)(?:\*\*)?\s*$",
+        "",
+        text,
+        flags=re.I | re.M,
+    )
+    text = re.sub(
+        r"^\s{0,3}(?:#{1,6}\s*)?(?:\*\*)?SECTION\s+\d+\s*[—\-:]\s*",
+        "",
+        text,
+        flags=re.I | re.M,
+    )
+    text = re.sub(
         r"^(\s{0,3}(?:#{1,6}\s*)?(?:\*\*)?)Documentation Gaps(?:\*\*)?\s*$",
         r"\1Clinical Rationale for Exception",
         text,
